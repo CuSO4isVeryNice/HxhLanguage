@@ -95,8 +95,8 @@ HxHLanguage的每条语句末尾都要有"。"或"；"或";"
 
 ### 中文风格语法
 
-* **变量**：`定义变量 : myVariable [ , 类型 : myType ] ;`
-* **常量**：`定义常量 : myConstant [ , 类型 : myType ] ;`
+* **变量**：`定义变量 : myVariable [ , 类型是 : myType ] ;`
+* **常量**：`定义常量 : myConstant [ , 类型是 : myType ] ;`
 
 ## 3. 函数定义
 
