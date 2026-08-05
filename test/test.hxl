@@ -2,12 +2,12 @@ cls: Test {
     var:var1:int;
     var:var2:int;
     fun:fun1():void -> {
-        __hx_write_string__ "Test:fun1";
+        __hx_write_string__ "Test:fun1\n";
     }
 }
 
 函数：主函数（无参数）->{
     var:newVar:Test;
     newVar:fun1();
-    返回：0。  
+    ret：0。  
 }

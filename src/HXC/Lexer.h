@@ -56,17 +56,17 @@ typedef struct Tokens {  // Token流
     int count;
     Token* tokens;
 } Tokens;
-wchar_t* keyword[] = {  // 关键字
-    L"ret",      L"var",      L"con",        L"fun",      L"cls",     L"if",         L"int",        L"float",  L"str",
-    L"char",     L"整型",     L"浮点型",     L"字符串型", L"字符型",  L"定义变量",   L"定义常量",   L"函数",   L"定义类",
-    L"公有成员", L"私有成员", L"受保护成员", L"public",   L"private", L"proctected", L"类型",     L"父类", L"repeat",
-    L"until",    L"循环",     L"直到",       L"若",       L"返回",    L"返回类型", L"无返回类型", L"for",    L"遍历",
+const wchar_t* const keyword[] = {  // 关键字
+    L"ret",      L"var",      L"con",        L"fun",      L"cls",     L"if",         L"int",        L"float", L"str",
+    L"char",     L"整型",     L"浮点型",     L"字符串型", L"字符型",  L"定义变量",   L"定义常量",   L"函数",  L"定义类",
+    L"公有成员", L"私有成员", L"受保护成员", L"public",   L"private", L"proctected", L"类型",       L"父类",  L"repeat",
+    L"until",    L"循环",     L"直到",       L"若",       L"返回",    L"返回类型",   L"无返回类型", L"for",   L"遍历",
     L"else",     L"否则",     L"遍历",       L"中间变量", NULL};
 static inline wchar_t* escape(const wchar_t* src) noexcept;
-static inline bool isKeyword(wchar_t* str) noexcept;  // 判断是否是关键字
-static inline bool isOperator(wchar_t ch) noexcept;   // 判断是否是操作符
-Tokens* lex(wchar_t* src, int* err) noexcept;         // 词法分析
-void freeTokens(Tokens** tokens) noexcept;            // 释放
+static inline bool isKeyword(const wchar_t* str) noexcept;  // 判断是否是关键字
+static inline bool isOperator(wchar_t ch) noexcept;         // 判断是否是操作符
+Tokens* lex(wchar_t* src, int* err) noexcept;               // 词法分析
+void freeTokens(Tokens** tokens) noexcept;                  // 释放
 
 Tokens* lex(wchar_t* src, int* err) noexcept {
 #define MEM_FAIL     \
@@ -185,6 +185,49 @@ Tokens* lex(wchar_t* src, int* err) noexcept {
 #endif
             tokens->count++;
             token_index++;
+        } else if (src[index_src] == L'`') {  // 原始字符串(此处参照了Kotlin与JS)
+            int start_index = index_src;
+            int end_index = 0;
+            while (index_src < length_src) {
+                index_src++;
+                if (src[index_src] == L'\n') line++;
+                if (src[index_src] == L'\\') {
+                    if (index_src + 1 >= length_src) {
+                        wchar_t errCode[3] = {0};
+                        errCode[0] = src[start_index];
+                        if (start_index + 1 < length_src) errCode[1] = src[start_index + 1];
+                        setError(ERR_STR_NO_END, line, errCode);
+                        ERR;
+                    }
+                    index_src += 2;
+                }
+                if (src[index_src] == L'`') {
+                    end_index = index_src;
+                    break;
+                }
+            }
+            // 字符串没结尾
+            if (end_index == 0) {
+                wchar_t errCode[3] = {0};
+                errCode[0] = src[start_index];
+                if (start_index + 1 < length_src) errCode[1] = src[start_index + 1];
+                setError(ERR_STR_NO_END, line, errCode);
+                ERR;
+            }
+            start_index++;
+            int len = end_index - start_index;
+            tokens->tokens[token_index].mark = STR;
+            tokens->tokens[token_index].type = TOK_VAL;
+            tokens->tokens[token_index].value = (wchar_t*)calloc(len + 1, sizeof(wchar_t));
+            if (!(tokens->tokens[token_index].value)) MEM_FAIL;
+            if (len != 0) wcsncpy(tokens->tokens[token_index].value, &(src[start_index]), len);
+            // 原始字符串不转义
+            tokens->tokens[token_index].line = line;
+#ifdef HX_DEBUG
+            // log(L"已创建一个新的字符串型Token");
+#endif
+            token_index++;
+            tokens->count++;
         } else if (src[index_src] == L'\"' || src[index_src] == L'“' || src[index_src] == L'”') {  // 字符串
             int start_index = index_src;
             int end_index = 0;
@@ -463,7 +506,7 @@ Tokens* lex(wchar_t* src, int* err) noexcept {
     return tokens;
 }
 
-static bool isKeyword(wchar_t* str) noexcept {
+static bool isKeyword(const wchar_t* str) noexcept {
     if (str == NULL) return false;
     int index = 0;
     while (keyword[index] != NULL) {

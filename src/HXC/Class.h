@@ -1,23 +1,27 @@
 #pragma once
 
-#include "Parser.h"
-#include "ObjectCode.h"
 #include "Error.h"
 #include "IR.h"
 #include "Lexer.h"
+#include "ObjectCode.h"
+#include "Parser.h"
 #include "SymbolTable.h"
 
 static void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* inst_index, int* inst_size, ASTNode* node,
-                                        ConstantPool* constantPool, std::vector<SymbolTable>& symbols, int procIndex, int* err);
-                                        static int getVarSize(IR_DataType type, std::vector<IR_Class*>& class_table);
+                                        std::vector<IR_Class*>& classTable, ConstantPool* constantPool,
+                                        std::vector<SymbolTable>& symbols, int procIndex, int* err);
 
-class PackedClassFunMem {
-   public:
-    PackedClassFunMem() : irFun(nullptr), cls(nullptr) {}
-    enum { FUN_PUBLIC, FUN_PRIVATE, FUN_PROTECTED } accessPermission;
-    IR_Function* irFun;
-    IR_Class* cls;  // 不一定指向用户语句中的类，但该类一定包含该函数且是用户语句中的类的父类
-};
+static int getVarSize(IR_DataType type, std::vector<IR_Class*>& class_table);
+IR_Class* getClassByName(const wchar_t* className, std::vector<IR_Class*> classTable) {
+    if (className == nullptr) return nullptr;
+    for (int i = 0; i < classTable.size(); i++) {
+        if (classTable.at(i)->name != nullptr && wcscmp(classTable.at(i)->name, className) == 0) return classTable.at(i);
+    }
+    return nullptr;
+}
+
+IR_Variable* findVariableMemberInClass(const wchar_t* varMemName, IR_Class* cls, std::vector<IR_Class*>& classTable);
+
 PackedClassFunMem* findFunInClass(IR_Function& fun, IR_Class* cls, std::vector<IR_Class*>& classTable) {
 #ifdef HX_DEBUG
     log(L"查找类的成员函数%ls", fun.name ? fun.name : L"(null)");
@@ -25,24 +29,44 @@ PackedClassFunMem* findFunInClass(IR_Function& fun, IR_Class* cls, std::vector<I
     if (cls == nullptr) {
         return nullptr;
     }
+#ifdef HX_DEBUG
+    log(L"- 类：%ls", cls->name);
+    log(L"- fatherIndex: %d", cls->fatherIndex);
+#endif
     PackedClassFunMem* packedClassFunMem = new PackedClassFunMem;
     for (int i = 0; i < cls->body.publicMembers.size(); i++) {
         if (cls->body.publicMembers.at(i).type == IR_CM_FUNCTION) {
             IR_Function* funInClass = cls->body.publicMembers.at(i).data.function;
-            if (wcscmp(funInClass->name, fun.name) == 0) {
+#ifdef HX_DEBUG
+            fwprintf(logStream, L"  member %d: type=%d, funPtr=%p\n", i, cls->body.publicMembers.at(i).type, (void*)funInClass);
+            if (funInClass) {
+                fwprintf(logStream, L"    fun->name=%ls\n", funInClass->name ? funInClass->name : L"(null)");
+            }
+#endif
+            if (funInClass == nullptr) continue;
+            if (funInClass->name != nullptr && fun.name != nullptr && wcscmp(funInClass->name, fun.name) == 0) {
                 if (funInClass->paramCount == fun.paramCount) {
+                    bool isMatch = true;
+
                     for (int j = 0; j < fun.paramCount; j++) {
-                        if (fun.params[j].type.kind == funInClass->params[j].type.kind) {
-                            if (fun.params[j].type.kind == IR_DT_CUSTOM || fun.params[j].type.kind == IR_DT_CUSTOM_ARR) {
-                                if (wcscmp(fun.params[j].type.customTypeName, funInClass->params[j].type.customTypeName) != 0) {
-                                    continue;
-                                }
-                                packedClassFunMem->accessPermission = PackedClassFunMem::FUN_PUBLIC;
-                                packedClassFunMem->cls = cls;
-                                packedClassFunMem->irFun = funInClass;
-                                return packedClassFunMem;
+                        // 如果类型不同，直接宣告不匹配喵
+                        if (fun.params[j].type.kind != funInClass->params[j].type.kind) {
+                            isMatch = false;
+                            break;
+                        }
+                        // 如果是自定义类型，还要额外检查类名
+                        if (fun.params[j].type.kind == IR_DT_CUSTOM || fun.params[j].type.kind == IR_DT_CUSTOM_ARR) {
+                            if (wcscmp(fun.params[j].type.customTypeName, funInClass->params[j].type.customTypeName) != 0) {
+                                isMatch = false;
+                                break;
                             }
                         }
+                    }
+                    if (isMatch) {
+                        packedClassFunMem->accessPermission = PackedClassFunMem::FUN_PUBLIC;
+                        packedClassFunMem->cls = cls;
+                        packedClassFunMem->irFun = funInClass;
+                        return packedClassFunMem;
                     }
                 }
             }
@@ -51,20 +75,36 @@ PackedClassFunMem* findFunInClass(IR_Function& fun, IR_Class* cls, std::vector<I
     for (int i = 0; i < cls->body.privateMembers.size(); i++) {
         if (cls->body.privateMembers.at(i).type == IR_CM_FUNCTION) {
             IR_Function* funInClass = cls->body.privateMembers.at(i).data.function;
-            if (wcscmp(funInClass->name, fun.name) == 0) {
+#ifdef HX_DEBUG
+            fwprintf(logStream, L"  member %d: type=%d, funPtr=%p\n", i, cls->body.publicMembers.at(i).type, (void*)funInClass);
+            if (funInClass) {
+                fwprintf(logStream, L"    fun->name=%ls\n", funInClass->name ? funInClass->name : L"(null)");
+            }
+#endif
+            if (funInClass == nullptr) continue;
+            if (funInClass->name != nullptr && fun.name != nullptr && wcscmp(funInClass->name, fun.name) == 0) {
                 if (funInClass->paramCount == fun.paramCount) {
+                    bool isMatch = true;
+
                     for (int j = 0; j < fun.paramCount; j++) {
-                        if (fun.params[j].type.kind == funInClass->params[j].type.kind) {
-                            if (fun.params[j].type.kind == IR_DT_CUSTOM || fun.params[j].type.kind == IR_DT_CUSTOM_ARR) {
-                                if (wcscmp(fun.params[j].type.customTypeName, funInClass->params[j].type.customTypeName) != 0) {
-                                    continue;
-                                }
-                                packedClassFunMem->accessPermission = PackedClassFunMem::FUN_PRIVATE;
-                                packedClassFunMem->cls = cls;
-                                packedClassFunMem->irFun = funInClass;
-                                return packedClassFunMem;
+                        // 如果类型不同，直接宣告不匹配喵
+                        if (fun.params[j].type.kind != funInClass->params[j].type.kind) {
+                            isMatch = false;
+                            break;
+                        }
+                        // 如果是自定义类型，还要额外检查类名
+                        if (fun.params[j].type.kind == IR_DT_CUSTOM || fun.params[j].type.kind == IR_DT_CUSTOM_ARR) {
+                            if (wcscmp(fun.params[j].type.customTypeName, funInClass->params[j].type.customTypeName) != 0) {
+                                isMatch = false;
+                                break;
                             }
                         }
+                    }
+                    if (isMatch) {
+                        packedClassFunMem->accessPermission = PackedClassFunMem::FUN_PUBLIC;
+                        packedClassFunMem->cls = cls;
+                        packedClassFunMem->irFun = funInClass;
+                        return packedClassFunMem;
                     }
                 }
             }
@@ -73,20 +113,36 @@ PackedClassFunMem* findFunInClass(IR_Function& fun, IR_Class* cls, std::vector<I
     for (int i = 0; i < cls->body.protectedMembers.size(); i++) {
         if (cls->body.protectedMembers.at(i).type == IR_CM_FUNCTION) {
             IR_Function* funInClass = cls->body.protectedMembers.at(i).data.function;
-            if (wcscmp(funInClass->name, fun.name) == 0) {
+#ifdef HX_DEBUG
+            fwprintf(logStream, L"  member %d: type=%d, funPtr=%p\n", i, cls->body.publicMembers.at(i).type, (void*)funInClass);
+            if (funInClass) {
+                fwprintf(logStream, L"    fun->name=%ls\n", funInClass->name ? funInClass->name : L"(null)");
+            }
+#endif
+            if (funInClass == nullptr) continue;
+            if (funInClass->name != nullptr && fun.name != nullptr && wcscmp(funInClass->name, fun.name) == 0) {
                 if (funInClass->paramCount == fun.paramCount) {
+                    bool isMatch = true;
+
                     for (int j = 0; j < fun.paramCount; j++) {
-                        if (fun.params[j].type.kind == funInClass->params[j].type.kind) {
-                            if (fun.params[j].type.kind == IR_DT_CUSTOM || fun.params[j].type.kind == IR_DT_CUSTOM_ARR) {
-                                if (wcscmp(fun.params[j].type.customTypeName, funInClass->params[j].type.customTypeName) != 0) {
-                                    continue;
-                                }
-                                packedClassFunMem->accessPermission = PackedClassFunMem::FUN_PROTECTED;
-                                packedClassFunMem->cls = cls;
-                                packedClassFunMem->irFun = funInClass;
-                                return packedClassFunMem;
+                        // 如果类型不同，直接宣告不匹配喵
+                        if (fun.params[j].type.kind != funInClass->params[j].type.kind) {
+                            isMatch = false;
+                            break;
+                        }
+                        // 如果是自定义类型，还要额外检查类名
+                        if (fun.params[j].type.kind == IR_DT_CUSTOM || fun.params[j].type.kind == IR_DT_CUSTOM_ARR) {
+                            if (wcscmp(fun.params[j].type.customTypeName, funInClass->params[j].type.customTypeName) != 0) {
+                                isMatch = false;
+                                break;
                             }
                         }
+                    }
+                    if (isMatch) {
+                        packedClassFunMem->accessPermission = PackedClassFunMem::FUN_PUBLIC;
+                        packedClassFunMem->cls = cls;
+                        packedClassFunMem->irFun = funInClass;
+                        return packedClassFunMem;
                     }
                 }
             }
@@ -94,21 +150,31 @@ PackedClassFunMem* findFunInClass(IR_Function& fun, IR_Class* cls, std::vector<I
     }
     // 没找到就查找父类
     if (cls->fatherIndex == -1) {
+#ifdef HX_DEBUG
+        log(L"没找到");
+#endif
+        delete packedClassFunMem;
         return nullptr;
     }
+#ifdef HX_DEBUG
+    log(L"查找父类");
+#endif
     return findFunInClass(fun, classTable.at(cls->fatherIndex), classTable);
 }
 static int generateClassFunctionStatement(
     int& index, FunCallPitchTable& pitchTable, ConstantPool* constantPool, int classIndex, int globalFunctionCount,
     std::vector<IR_Function*>& allFunctions, IR_Program* currentProgram, int allFunctionCount, IR_Function* function,
-    SymbolTable& localeSymbolTable, std::vector<SymbolTable>& outsideScopes /*块内与块外的并集,localeSymbolTable包含其中*/,
-    int localeScopeIndex, Procedure* proc, int procIndex, uint32_t& stackSize, uint32_t& localVarSize, int* err);
+    std::vector<SymbolTable>& outsideScopes /*块内与块外的并集,localeSymbolTable包含其中*/, int localeScopeIndex,
+    Procedure* proc, int procIndex, uint32_t& stackSize, uint32_t& localVarSize, int* err);
 
 static int generateClassFunctionStatement(
     int& index, FunCallPitchTable& pitchTable, ConstantPool* constantPool, int classIndex, int globalFunctionCount,
     std::vector<IR_Function*>& allFunctions, IR_Program* currentProgram, int allFunctionCount, IR_Function* function,
-    SymbolTable& localeSymbolTable, std::vector<SymbolTable>& outsideScopes /*块内与块外的并集,localeSymbolTable包含其中*/,
-    int localeScopeIndex, Procedure* proc, int procIndex, uint32_t& stackSize, uint32_t& localVarSize, int* err) {
+    std::vector<SymbolTable>& outsideScopes /*块内与块外的并集,localeSymbolTable包含其中*/, int localeScopeIndex,
+    Procedure* proc, int procIndex, uint32_t& stackSize, uint32_t& localVarSize, int* err) {
+#ifdef HX_DEBUG
+    log(L"编译类的成员函数   调用：Class.h->generateClassFunctionStatement");
+#endif
     if (!function || !proc || !err) return -1;
     Token& currentToken = function->bodyTokens[index];
     if (currentToken.type == TOK_END) return 0;
@@ -127,9 +193,9 @@ static int generateClassFunctionStatement(
         uint32_t _localVarSize = 0U;
         int newLocaleScopeIndex = outsideScopes.size() - 1;
         while (function->bodyTokens[index].type != TOK_OPR_RBRACE) {
-            generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions, currentProgram, allFunctionCount, function,
-                              outsideScopes.back(), outsideScopes, newLocaleScopeIndex, proc, procIndex, stackSize,
-                              _localVarSize, err);
+            generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions,
+                                           currentProgram, allFunctionCount, function, outsideScopes, newLocaleScopeIndex, proc,
+                                           procIndex, stackSize, _localVarSize, err);
             if (*err) return *err;
             index++;
         }
@@ -178,7 +244,8 @@ static int generateClassFunctionStatement(
         index++;  // 指向表达式起始位置
         // wprintf(L"%ls", function->bodyTokens[index].value);
         ASTNode* expNode = parseExpression(function->bodyTokens, &index, function->body_token_count, pitchTable,
-                                           &localeSymbolTable, outsideScopes, localeScopeIndex, err);
+                                           &(outsideScopes.at(localeScopeIndex)), outsideScopes, localeScopeIndex,
+                                           currentProgram->classes, err);
         if (*err != 0 || !expNode) {
             delete (proc);
             return 255;
@@ -189,8 +256,8 @@ static int generateClassFunctionStatement(
         // 生成表达式指令
         int inst_index = proc->instructions.size();
         int inst_size = proc->instructions.size();
-        generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, constantPool, outsideScopes,
-                                    procIndex, err);
+        generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, currentProgram->classes, constantPool,
+                                    outsideScopes, procIndex, err);
         if (*err != 0) {
             freeAST(expNode);
             return 255;
@@ -204,10 +271,10 @@ static int generateClassFunctionStatement(
         if (function->bodyTokens[index].type != TOK_END) {
             setError(ERR_RET, currentToken.line, NULL);
             *err = 255;
-            freeAST(expNode);
             delete (proc);
             return 255;
         }
+        return 0;
         // 向标准输出流写字符串
     } else if (wcscmp(currentToken.value, L"__hx_write_string__") == 0) {
         if (index + 1 >= function->body_token_count) {
@@ -247,7 +314,8 @@ static int generateClassFunctionStatement(
         if ((function->bodyTokens[index].type != TOK_END)) return 0;
     } else if (currentToken.type == TOK_ID) {  // 赋值或调用函数
         ASTNode* expNode = parseExpression(function->bodyTokens, &index, function->body_token_count, pitchTable,
-                                           &localeSymbolTable, outsideScopes, localeScopeIndex, err);
+                                           &(outsideScopes.at(localeScopeIndex)), outsideScopes, localeScopeIndex,
+                                           currentProgram->classes, err);
         if (*err != 0 || !expNode) {
             delete (proc);
             return 255;
@@ -255,8 +323,8 @@ static int generateClassFunctionStatement(
         // 生成表达式指令
         int inst_index = proc->instructions.size();
         int inst_size = proc->instructions.size();
-        generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, constantPool, outsideScopes,
-                                    procIndex, err);
+        generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, currentProgram->classes, constantPool,
+                                    outsideScopes, procIndex, err);
         if (expNode->kind == NODE_FUN_CALL) {
 #ifdef HX_DEBUG
             log(L"分析表达式->调用函数");
@@ -286,7 +354,7 @@ static int generateClassFunctionStatement(
                 for (int j = 0; j < outsideScopes[i].vars.size(); j++) {
                     // 变量的指令列表最后一条刚好是刚刚的赋值指令
                     if (!outsideScopes[i].vars[j].instIndex.empty() &&
-                            outsideScopes[i].vars[j].instIndex.back() == storeInstIndex) {
+                        outsideScopes[i].vars[j].instIndex.back() == storeInstIndex) {
                         outsideScopes[i].vars[j].instIndex.push_back(popInstIndex);
                     }
                 }
@@ -337,7 +405,7 @@ static int generateClassFunctionStatement(
         log(L"解析到局部变量“%ls”", newVar.name);
 #endif
         // 检查变量唯一性
-        if (getVarIndex(newVar.name, &localeSymbolTable) != -1) {
+        if (getVarIndex(newVar.name, &(outsideScopes.at(localeScopeIndex))) != -1) {
             *err = 255;
             setError(ERR_VAR_REPEATED, currentToken.line, NULL);
             delete (proc);
@@ -376,7 +444,7 @@ static int generateClassFunctionStatement(
                 return 255;
             }
             if (wcscmp(function->bodyTokens[index].value, L"int") == 0 ||
-                    wcscmp(function->bodyTokens[index].value, L"整型") == 0) {
+                wcscmp(function->bodyTokens[index].value, L"整型") == 0) {
                 newVar.type.kind = IR_DT_INT;
                 newVar.size = 4;
                 // int&
@@ -394,7 +462,7 @@ static int generateClassFunctionStatement(
                     }
                     index++;
                     if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                        function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
                         setError(ERR_TYPE, currentToken.line, NULL);
                         *err = 255;
                         delete (proc);
@@ -430,7 +498,7 @@ static int generateClassFunctionStatement(
                     }
                     index++;
                     if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                        function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
                         setError(ERR_TYPE, currentToken.line, NULL);
                         *err = 255;
                         delete (proc);
@@ -463,7 +531,7 @@ static int generateClassFunctionStatement(
                     }
                     index++;
                     if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                        function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
                         setError(ERR_TYPE, currentToken.line, NULL);
                         *err = 255;
                         delete (proc);
@@ -495,7 +563,7 @@ static int generateClassFunctionStatement(
                     }
                     index++;
                     if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                        function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
                         setError(ERR_TYPE, currentToken.line, NULL);
                         *err = 255;
                         delete (proc);
@@ -537,7 +605,7 @@ static int generateClassFunctionStatement(
                     }
                     index++;
                     if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                        function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
                         setError(ERR_TYPE, currentToken.line, NULL);
                         *err = 255;
                         delete (proc);
@@ -575,8 +643,8 @@ static int generateClassFunctionStatement(
         if (newVar.isTypeKnown && newVar.type.arrayLength != 0) {
             // 分配堆内存的指令应在初始化指令之前
             if (newVar.type.kind == IR_DT_CHAR_ARR || newVar.type.kind == IR_DT_CUSTOM_ARR ||
-                    newVar.type.kind == IR_DT_FLOAT_ARR || newVar.type.kind == IR_DT_INT_ARR ||
-                    newVar.type.kind == IR_DT_STRING_ARR) {  // alloc + store ptr + store length
+                newVar.type.kind == IR_DT_FLOAT_ARR || newVar.type.kind == IR_DT_INT_ARR ||
+                newVar.type.kind == IR_DT_STRING_ARR) {  // alloc + store ptr + store length
                 int allocInstIndex = 0;
                 if (isInit) {
                     proc->instructions.insert(proc->instructions.begin() + initInstBegin, 4, Instruction{OP_NOP});
@@ -636,7 +704,7 @@ static int generateClassFunctionStatement(
 #ifdef HX_DEBUG
         log(L"将%ls推入局部符号表", newVar.name);
 #endif
-        localeSymbolTable.vars.push_back(newVar);
+        (outsideScopes.at(localeScopeIndex)).vars.push_back(newVar);
         uint32_t varSize = (uint32_t)getVarSize(newVar.type, currentProgram->classes);
         // if (stackSize + varSize > stackSize) stackSize += varSize;
         if (localVarSize + 1 > localVarSize) localVarSize++;
@@ -681,7 +749,7 @@ static int generateClassFunctionStatement(
         log(L"解析到局部变量“%ls”", newVar.name);
 #endif
         // 检查变量唯一性
-        if (getVarIndex(newVar.name, &localeSymbolTable) != -1) {
+        if (getVarIndex(newVar.name, &(outsideScopes.at(localeScopeIndex))) != -1) {
             *err = 255;
             setError(ERR_VAR_REPEATED, currentToken.line, NULL);
             delete (proc);
@@ -749,7 +817,7 @@ static int generateClassFunctionStatement(
                     return 255;
                 }
                 if (wcscmp(function->bodyTokens[index].value, L"int") == 0 ||
-                        wcscmp(function->bodyTokens[index].value, L"整型") == 0) {
+                    wcscmp(function->bodyTokens[index].value, L"整型") == 0) {
                     newVar.type.kind = IR_DT_INT;
                     newVar.size = 4;
                     // int&
@@ -905,8 +973,8 @@ static int generateClassFunctionStatement(
         if (newVar.isTypeKnown && newVar.type.arrayLength != 0) {
             // 分配堆内存的指令应在初始化指令之前
             if (newVar.type.kind == IR_DT_CHAR_ARR || newVar.type.kind == IR_DT_CUSTOM_ARR ||
-                    newVar.type.kind == IR_DT_FLOAT_ARR || newVar.type.kind == IR_DT_INT_ARR ||
-                    newVar.type.kind == IR_DT_STRING_ARR) {  // alloc + store ptr + store length
+                newVar.type.kind == IR_DT_FLOAT_ARR || newVar.type.kind == IR_DT_INT_ARR ||
+                newVar.type.kind == IR_DT_STRING_ARR) {  // alloc + store ptr + store length
                 int allocInstIndex = 0;
                 if (isInit) {
                     proc->instructions.insert(proc->instructions.begin() + initInstBegin, 4, Instruction{OP_NOP});
@@ -968,7 +1036,7 @@ static int generateClassFunctionStatement(
 #ifdef HX_DEBUG
         log(L"将%ls推入局部符号表", newVar.name);
 #endif
-        localeSymbolTable.vars.push_back(newVar);
+        (outsideScopes.at(localeScopeIndex)).vars.push_back(newVar);
         uint32_t varSize = (uint32_t)getVarSize(newVar.type, currentProgram->classes);
         // if (stackSize + varSize > stackSize) stackSize += varSize;
         if (localVarSize + 1 > localVarSize) localVarSize++;
@@ -998,10 +1066,10 @@ static int generateClassFunctionStatement(
         }
         index++;  // 指向语句或块
         uint32_t jmpAddr = proc->instructions.size();
-        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions, currentProgram, allFunctionCount, function,
-                              outsideScopes.back(), outsideScopes, localeScopeIndex, proc, procIndex, stackSize,
-                              localVarSize, err);
-        if(*err != 0) {
+        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions,
+                                       currentProgram, allFunctionCount, function, outsideScopes, localeScopeIndex, proc,
+                                       procIndex, stackSize, localVarSize, err);
+        if (*err != 0) {
             delete (proc);
             return *err;
         }
@@ -1042,16 +1110,17 @@ static int generateClassFunctionStatement(
                 index++;
                 if (function->bodyTokens[index].type == TOK_END) break;
             }
-            ASTNode* expNode = parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &localeSymbolTable,
-                                               outsideScopes, localeScopeIndex, err);
+            ASTNode* expNode =
+                parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &(outsideScopes.at(localeScopeIndex)),
+                                outsideScopes, localeScopeIndex, currentProgram->classes, err);
             if (*err != 0 || !expNode) {
                 delete (proc);
                 return 255;
             }
             int inst_index = proc->instructions.size();
             int inst_size = proc->instructions.size();
-            generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, constantPool, outsideScopes,
-                                        procIndex, err);
+            generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, currentProgram->classes,
+                                        constantPool, outsideScopes, procIndex, err);
             if (*err != 0) {
                 freeAST(expNode);
                 return 255;
@@ -1109,10 +1178,10 @@ static int generateClassFunctionStatement(
         }
         index++;  // 指向语句或块
         uint32_t jmpAddr = proc->instructions.size();
-        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions, currentProgram, allFunctionCount, function,
-                              outsideScopes.back(), outsideScopes, localeScopeIndex, proc, procIndex, stackSize,
-                              localVarSize, err);
-        if(*err != 0) {
+        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions,
+                                       currentProgram, allFunctionCount, function, outsideScopes, localeScopeIndex, proc,
+                                       procIndex, stackSize, localVarSize, err);
+        if (*err != 0) {
             delete (proc);
             return *err;
         }
@@ -1153,16 +1222,17 @@ static int generateClassFunctionStatement(
                 index++;
                 if (function->bodyTokens[index].type == TOK_END) break;
             }
-            ASTNode* expNode = parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &localeSymbolTable,
-                                               outsideScopes, localeScopeIndex, err);
+            ASTNode* expNode =
+                parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &(outsideScopes.at(localeScopeIndex)),
+                                outsideScopes, localeScopeIndex, currentProgram->classes, err);
             if (*err != 0 || !expNode) {
                 delete (proc);
                 return 255;
             }
             int inst_index = proc->instructions.size();
             int inst_size = proc->instructions.size();
-            generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, constantPool, outsideScopes,
-                                        procIndex, err);
+            generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, currentProgram->classes,
+                                        constantPool, outsideScopes, procIndex, err);
             if (*err != 0) {
                 freeAST(expNode);
                 return 255;
@@ -1226,16 +1296,17 @@ static int generateClassFunctionStatement(
             if (function->bodyTokens[index].type == TOK_OPR_POINT) break;
         }
         // 分析表达式
-        ASTNode* expNode = parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &localeSymbolTable,
-                                           outsideScopes, localeScopeIndex, err);
+        ASTNode* expNode =
+            parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &(outsideScopes.at(localeScopeIndex)),
+                            outsideScopes, localeScopeIndex, currentProgram->classes, err);
         if (*err != 0 || !expNode) {
             delete (proc);
             return 255;
         }
         int inst_index = proc->instructions.size();
         int inst_size = proc->instructions.size();
-        generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, constantPool, outsideScopes,
-                                    procIndex, err);
+        generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, currentProgram->classes, constantPool,
+                                    outsideScopes, procIndex, err);
         if (*err != 0) {
             freeAST(expNode);
             return 255;
@@ -1266,10 +1337,10 @@ static int generateClassFunctionStatement(
         proc->instructions.push_back(jmpInst);
         int jmpInstIndex = proc->instructions.size() - 1;
         // 生成块或语句的目标代码
-        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions, currentProgram, allFunctionCount, function,
-                              outsideScopes.back(), outsideScopes, localeScopeIndex, proc, procIndex, stackSize,
-                              localVarSize, err);
-        if(*err != 0) {
+        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions,
+                                       currentProgram, allFunctionCount, function, outsideScopes, localeScopeIndex, proc,
+                                       procIndex, stackSize, localVarSize, err);
+        if (*err != 0) {
             delete (proc);
             return *err;
         }
@@ -1280,7 +1351,7 @@ static int generateClassFunctionStatement(
         }
         bool hasNextElse =
             (index + 1 < function->body_token_count && (wcscmp(function->bodyTokens[index + 1].value, L"else") == 0 ||
-                    wcscmp(function->bodyTokens[index + 1].value, L"否则") == 0));
+                                                        wcscmp(function->bodyTokens[index + 1].value, L"否则") == 0));
         std::vector<int> endOfIfBlock;
         if (hasNextElse) {
             Instruction ifBodyJmp = {};
@@ -1296,7 +1367,7 @@ static int generateClassFunctionStatement(
         proc->instructions.push_back(nopInst);
         memcpy(proc->instructions.at(jmpInstIndex).params[1].value, &falseJmpAddr, sizeof(uint32_t));
         while (index + 1 < function->body_token_count && (wcscmp(function->bodyTokens[index + 1].value, L"else") == 0 ||
-                wcscmp(function->bodyTokens[index + 1].value, L"否则") == 0)) {
+                                                          wcscmp(function->bodyTokens[index + 1].value, L"否则") == 0)) {
             index++;
             if (index + 1 >= function->body_token_count) {
                 setError(ERR_IF, currentToken.line, NULL);
@@ -1319,16 +1390,16 @@ static int generateClassFunctionStatement(
             }
             (index)++;  // 挪到语句或块
 
-            generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions, currentProgram, allFunctionCount, function,
-                              outsideScopes.back(), outsideScopes, localeScopeIndex, proc, procIndex, stackSize,
-                              localVarSize, err);
-        if(*err != 0) {
-            delete (proc);
-            return *err;
-        }
+            generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions,
+                                           currentProgram, allFunctionCount, function, outsideScopes, localeScopeIndex, proc,
+                                           procIndex, stackSize, localVarSize, err);
+            if (*err != 0) {
+                delete (proc);
+                return *err;
+            }
             hasNextElse =
                 (index + 1 < function->body_token_count && (wcscmp(function->bodyTokens[index + 1].value, L"else") == 0 ||
-                        wcscmp(function->bodyTokens[index + 1].value, L"否则") == 0));
+                                                            wcscmp(function->bodyTokens[index + 1].value, L"否则") == 0));
             if (hasNextElse) {
                 Instruction gotoInst = {};
                 gotoInst.opcode = OP_JMP;
@@ -1385,7 +1456,7 @@ static int generateClassFunctionStatement(
         }
         wcscpy(tmpVar.name, function->bodyTokens[index].value);
         // 检查变量唯一性
-        if (getVarIndex(tmpVar.name, &localeSymbolTable) != -1) {
+        if (getVarIndex(tmpVar.name, &(outsideScopes.at(localeScopeIndex))) != -1) {
             *err = 255;
             setError(ERR_VAR_REPEATED, currentToken.line, NULL);
             delete (proc);
@@ -1439,38 +1510,38 @@ static int generateClassFunctionStatement(
         Symbol* arr = &arrCopy;
         // 分析tmp的类型
         switch (arr->type.kind) {
-        case IR_DT_INT_ARR:
-            tmpVar.type.kind = IR_DT_INT;
-            tmpVar.size = 4;
-            break;
-        case IR_DT_FLOAT_ARR:
-            tmpVar.type.kind = IR_DT_FLOAT;
-            tmpVar.size = 8;
-            break;
-        case IR_DT_CHAR_ARR:
-            tmpVar.type.kind = IR_DT_CHAR;
-            tmpVar.size = 2;
-            break;
-        case IR_DT_STRING_ARR:
-            tmpVar.type.kind = IR_DT_STRING;
-            tmpVar.size = 8;
-            break;
-        case IR_DT_CUSTOM_ARR:
-            tmpVar.type.kind = IR_DT_CUSTOM;
-            tmpVar.size = 8;
-            tmpVar.type.customTypeName = (wchar_t*)calloc(wcslen(arr->type.customTypeName) + 1, sizeof(wchar_t));
-            if (!tmpVar.type.customTypeName) {
-                *err = -1;
+            case IR_DT_INT_ARR:
+                tmpVar.type.kind = IR_DT_INT;
+                tmpVar.size = 4;
+                break;
+            case IR_DT_FLOAT_ARR:
+                tmpVar.type.kind = IR_DT_FLOAT;
+                tmpVar.size = 8;
+                break;
+            case IR_DT_CHAR_ARR:
+                tmpVar.type.kind = IR_DT_CHAR;
+                tmpVar.size = 2;
+                break;
+            case IR_DT_STRING_ARR:
+                tmpVar.type.kind = IR_DT_STRING;
+                tmpVar.size = 8;
+                break;
+            case IR_DT_CUSTOM_ARR:
+                tmpVar.type.kind = IR_DT_CUSTOM;
+                tmpVar.size = 8;
+                tmpVar.type.customTypeName = (wchar_t*)calloc(wcslen(arr->type.customTypeName) + 1, sizeof(wchar_t));
+                if (!tmpVar.type.customTypeName) {
+                    *err = -1;
+                    delete (proc);
+                    return -1;
+                }
+                wcscpy(tmpVar.type.customTypeName, arr->type.customTypeName);
+                break;
+            default:
+                setError(ERR_FOR, function->bodyTokens[index].line, NULL);
+                *err = 255;
                 delete (proc);
-                return -1;
-            }
-            wcscpy(tmpVar.type.customTypeName, arr->type.customTypeName);
-            break;
-        default:
-            setError(ERR_FOR, function->bodyTokens[index].line, NULL);
-            *err = 255;
-            delete (proc);
-            return 255;
+                return 255;
         }
         tmpVar.isUsed = true;
 
@@ -1482,7 +1553,7 @@ static int generateClassFunctionStatement(
         tmpIndexVar.isUsed = true;  // 循环变量绝对被使用了
         outsideScopes.at(localeScopeIndex).vars.push_back(tmpIndexVar);
         int indexOfTmpIndexVar = (int)outsideScopes.at(localeScopeIndex).vars.size() - 1;  // 记录真正的循环变量索引
-        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)localeSymbolTable.vars.size()) {
+        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)(outsideScopes.at(localeScopeIndex)).vars.size()) {
             setError(ERR_FOR, currentToken.line, NULL);
             *err = 255;
             delete (proc);
@@ -1506,19 +1577,19 @@ static int generateClassFunctionStatement(
         Instruction storeIndexInst = {};
         storeIndexInst.opcode = OP_STORE_VAR;
         storeIndexInst.params[0].type = PARAM_TYPE_OFFEST;
-        uint32_t indexOffset = (uint32_t)(localeSymbolTable.vars.size() - 1);
+        uint32_t indexOffset = (uint32_t)((outsideScopes.at(localeScopeIndex)).vars.size() - 1);
         memcpy(storeIndexInst.params[0].value, &indexOffset, sizeof(uint32_t));
         storeIndexInst.params[0].size = sizeof(uint32_t);
         storeIndexInst.params[1].type = PARAM_TYPE_INT;
         *(uint32_t*)storeIndexInst.params[1].value = sizeof(uint32_t);
         storeIndexInst.params[1].size = sizeof(uint32_t);
-        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)localeSymbolTable.vars.size()) {
+        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)(outsideScopes.at(localeScopeIndex)).vars.size()) {
             setError(ERR_FOR, currentToken.line, NULL);
             *err = 255;
             delete (proc);
             return 255;
         }
-        localeSymbolTable.vars[indexOfTmpIndexVar].instIndex.push_back(proc->instructions.size());
+        (outsideScopes.at(localeScopeIndex)).vars[indexOfTmpIndexVar].instIndex.push_back(proc->instructions.size());
         proc->instructions.push_back(storeIndexInst);
         outsideScopes.at(localeScopeIndex).vars.at(indexOfTmpIndexVar).instIndex.push_back(proc->instructions.size() - 1);
         // 初始化结束
@@ -1536,7 +1607,7 @@ static int generateClassFunctionStatement(
         loadIndexInst.params[1].type = PARAM_TYPE_INT;
         loadIndexInst.params[1].size = sizeof(uint32_t);
         memcpy(loadIndexInst.params[0].value, &indexOffset, sizeof(uint32_t));
-        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)localeSymbolTable.vars.size()) {
+        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)(outsideScopes.at(localeScopeIndex)).vars.size()) {
             setError(ERR_FOR, currentToken.line, NULL);
             *err = 255;
             delete (proc);
@@ -1557,26 +1628,26 @@ static int generateClassFunctionStatement(
         memcpy(loadElementInst.params[0].value, &arrIndexVal, sizeof(uint32_t));
 
         switch (outsideScopes.at(arrScopeIdx).vars.at(arrVarIdx).type.kind) {
-        case IR_DT_INT_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_INT;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_FLOAT_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_FLOAT;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_CHAR_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_CHAR;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_STRING_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_STRING;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_CUSTOM_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_ADDRESS;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
+            case IR_DT_INT_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_INT;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_FLOAT_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_FLOAT;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_CHAR_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_CHAR;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_STRING_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_STRING;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_CUSTOM_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_ADDRESS;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
         }
         outsideScopes.at(arrScopeIdx).vars.at(arrVarIdx).instIndex.push_back(proc->instructions.size());
         proc->instructions.push_back(loadElementInst);
@@ -1617,9 +1688,9 @@ static int generateClassFunctionStatement(
             return 255;
         }
         (index)++;
-        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions, currentProgram, allFunctionCount, function,
-                              outsideScopes.back(), outsideScopes, localeScopeIndex, proc, procIndex, stackSize,
-                              localVarSize, err);
+        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions,
+                                       currentProgram, allFunctionCount, function, outsideScopes, localeScopeIndex, proc,
+                                       procIndex, stackSize, localVarSize, err);
         outsideScopes.back().vars.push_back(tmpVar);
         if (*err != 0) {
             delete (proc);
@@ -1805,7 +1876,7 @@ static int generateClassFunctionStatement(
         }
         wcscpy(tmpVar.name, function->bodyTokens[index].value);
         // 检查变量唯一性
-        if (getVarIndex(tmpVar.name, &localeSymbolTable) != -1) {
+        if (getVarIndex(tmpVar.name, &(outsideScopes.at(localeScopeIndex))) != -1) {
             *err = 255;
             setError(ERR_VAR_REPEATED, currentToken.line, NULL);
             delete (proc);
@@ -1817,38 +1888,38 @@ static int generateClassFunctionStatement(
         Symbol* arr = &arrCopy;
         // 分析tmp的类型
         switch (arr->type.kind) {
-        case IR_DT_INT_ARR:
-            tmpVar.type.kind = IR_DT_INT;
-            tmpVar.size = 4;
-            break;
-        case IR_DT_FLOAT_ARR:
-            tmpVar.type.kind = IR_DT_FLOAT;
-            tmpVar.size = 8;
-            break;
-        case IR_DT_CHAR_ARR:
-            tmpVar.type.kind = IR_DT_CHAR;
-            tmpVar.size = 2;
-            break;
-        case IR_DT_STRING_ARR:
-            tmpVar.type.kind = IR_DT_STRING;
-            tmpVar.size = 8;
-            break;
-        case IR_DT_CUSTOM_ARR:
-            tmpVar.type.kind = IR_DT_CUSTOM;
-            tmpVar.size = 8;
-            tmpVar.type.customTypeName = (wchar_t*)calloc(wcslen(arr->type.customTypeName) + 1, sizeof(wchar_t));
-            if (!tmpVar.type.customTypeName) {
-                *err = -1;
+            case IR_DT_INT_ARR:
+                tmpVar.type.kind = IR_DT_INT;
+                tmpVar.size = 4;
+                break;
+            case IR_DT_FLOAT_ARR:
+                tmpVar.type.kind = IR_DT_FLOAT;
+                tmpVar.size = 8;
+                break;
+            case IR_DT_CHAR_ARR:
+                tmpVar.type.kind = IR_DT_CHAR;
+                tmpVar.size = 2;
+                break;
+            case IR_DT_STRING_ARR:
+                tmpVar.type.kind = IR_DT_STRING;
+                tmpVar.size = 8;
+                break;
+            case IR_DT_CUSTOM_ARR:
+                tmpVar.type.kind = IR_DT_CUSTOM;
+                tmpVar.size = 8;
+                tmpVar.type.customTypeName = (wchar_t*)calloc(wcslen(arr->type.customTypeName) + 1, sizeof(wchar_t));
+                if (!tmpVar.type.customTypeName) {
+                    *err = -1;
+                    delete (proc);
+                    return -1;
+                }
+                wcscpy(tmpVar.type.customTypeName, arr->type.customTypeName);
+                break;
+            default:
+                setError(ERR_FOR, function->bodyTokens[index].line, NULL);
+                *err = 255;
                 delete (proc);
-                return -1;
-            }
-            wcscpy(tmpVar.type.customTypeName, arr->type.customTypeName);
-            break;
-        default:
-            setError(ERR_FOR, function->bodyTokens[index].line, NULL);
-            *err = 255;
-            delete (proc);
-            return 255;
+                return 255;
         }
         tmpVar.isUsed = true;
 
@@ -1884,13 +1955,13 @@ static int generateClassFunctionStatement(
         Instruction storeIndexInst = {};
         storeIndexInst.opcode = OP_STORE_VAR;
         storeIndexInst.params[0].type = PARAM_TYPE_OFFEST;
-        uint32_t indexOffset = (uint32_t)(localeSymbolTable.vars.size() - 1);
+        uint32_t indexOffset = (uint32_t)((outsideScopes.at(localeScopeIndex)).vars.size() - 1);
         memcpy(storeIndexInst.params[0].value, &indexOffset, sizeof(uint32_t));
         storeIndexInst.params[0].size = sizeof(uint32_t);
         storeIndexInst.params[1].type = PARAM_TYPE_INT;
         *(uint32_t*)storeIndexInst.params[1].value = sizeof(uint32_t);
         storeIndexInst.params[1].size = sizeof(uint32_t);
-        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)localeSymbolTable.vars.size()) {
+        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)(outsideScopes.at(localeScopeIndex)).vars.size()) {
             setError(ERR_FOR, currentToken.line, NULL);
             *err = 255;
             delete (proc);
@@ -1914,7 +1985,7 @@ static int generateClassFunctionStatement(
         loadIndexInst.params[1].type = PARAM_TYPE_INT;
         loadIndexInst.params[1].size = sizeof(uint32_t);
         memcpy(loadIndexInst.params[0].value, &indexOffset, sizeof(uint32_t));
-        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)localeSymbolTable.vars.size()) {
+        if (indexOfTmpIndexVar < 0 || indexOfTmpIndexVar >= (int)(outsideScopes.at(localeScopeIndex)).vars.size()) {
             setError(ERR_FOR, currentToken.line, NULL);
             *err = 255;
             delete (proc);
@@ -1935,26 +2006,26 @@ static int generateClassFunctionStatement(
         memcpy(loadElementInst.params[0].value, &arrIndexVal, sizeof(uint32_t));
 
         switch (outsideScopes.at(arrScopeIdx).vars.at(arrVarIdx).type.kind) {
-        case IR_DT_INT_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_INT;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_FLOAT_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_FLOAT;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_CHAR_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_CHAR;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_STRING_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_STRING;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
-        case IR_DT_CUSTOM_ARR:
-            loadElementInst.params[1].type = PARAM_TYPE_ADDRESS;
-            loadElementInst.params[1].size = sizeof(uint32_t);
-            break;
+            case IR_DT_INT_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_INT;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_FLOAT_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_FLOAT;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_CHAR_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_CHAR;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_STRING_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_STRING;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
+            case IR_DT_CUSTOM_ARR:
+                loadElementInst.params[1].type = PARAM_TYPE_ADDRESS;
+                loadElementInst.params[1].size = sizeof(uint32_t);
+                break;
         }
         outsideScopes.at(arrScopeIdx).vars.at(arrVarIdx).instIndex.push_back(proc->instructions.size());
         proc->instructions.push_back(loadElementInst);
@@ -1994,9 +2065,9 @@ static int generateClassFunctionStatement(
             return 255;
         }
         (index)++;
-       generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions, currentProgram, allFunctionCount, function,
-                              outsideScopes.back(), outsideScopes, localeScopeIndex, proc, procIndex, stackSize,
-                              localVarSize, err);
+        generateClassFunctionStatement(index, pitchTable, constantPool, classIndex, globalFunctionCount, allFunctions,
+                                       currentProgram, allFunctionCount, function, outsideScopes, localeScopeIndex, proc,
+                                       procIndex, stackSize, localVarSize, err);
         outsideScopes.back().vars.push_back(tmpVar);  // userTmpVar属于新作用域
         if (*err != 0) {
             delete (proc);

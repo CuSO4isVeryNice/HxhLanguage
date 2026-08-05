@@ -37,6 +37,8 @@ typedef struct IR_FunctionParam {
 } IR_FunctionParam;
 class FunCallPitch;
 typedef struct IR_Function {
+    enum { CLASS_FUN_MEM, GLOBAL_FUN } kind;
+
     wchar_t* name;
     IR_FunctionParam* params;
     int paramCount;
@@ -66,6 +68,7 @@ enum IR_ClassMemberType { IR_CM_VARIABLE, IR_CM_FUNCTION };
 typedef struct IR_ClassMember {
     IR_ClassMemberType type;
     IR_ClassMemberData data;
+    int funMemInGlobalIndex;  // 函数成员在全局表中的索引
 } IR_ClassMember;
 typedef struct IR_ClassBody {
     std::vector<IR_ClassMember> publicMembers;
@@ -76,7 +79,7 @@ typedef struct IR_Class {
     int line;  // 类定义所在行号
     wchar_t* name;
     wchar_t* parent_name;  // 父类名
-    int fatherIndex;       // 父类在类表中的索引，-1表示无父类
+    int fatherIndex = -1;  // 父类在类表中的索引，-1表示无父类
 
     IR_ClassBody body;
 
@@ -92,7 +95,7 @@ typedef struct IR_Program {
 
 // 变量处理：存储各变量与其对应的指令，用于回填、标记是否有用
 class Symbol {
-public:
+   public:
     bool isUsed;
     wchar_t* name;
     bool isTypeKnown;
@@ -141,9 +144,10 @@ public:
 };
 
 typedef class SymbolTable {
-public:
+   public:
     std::vector<IR_Function*> fun;  // 函数表（数组）
     std::vector<Symbol> vars;
+
     uint32_t var_size;
     SymbolTable& operator=(SymbolTable other) {
         std::swap(this->fun, other.fun);
@@ -159,13 +163,13 @@ public:
     SymbolTable() : var_size(0) {}
 } SymbolTable;
 class FunCallPitch {  // 回填CALL指令,被指向
-public:
+   public:
     FunCallPitch(IR_Function* ir_fun) noexcept : fun(ir_fun), index(-1) {}
     IR_Function* fun;
     int index;
 };
 class FunCallPitchTable {
-public:
+   public:
     std::vector<FunCallPitch*> pitches;
     FunCallPitch* enter(IR_Function* fun) {
         for (int i = 0; i < pitches.size(); i++) {
@@ -173,6 +177,9 @@ public:
         }
         FunCallPitch* pitch = new (std::nothrow) FunCallPitch(fun);
         if (pitch == nullptr) return NULL;
+
+        pitch->index = this->pitches.size();  ////////测试
+
         pitches.push_back(pitch);
         return pitch;
     }
@@ -232,8 +239,16 @@ typedef struct ASTNode {
             uint32_t arg_count;
         } funCall;
     } data;
-    wchar_t* fromClassName;  //所属的类
+    wchar_t* fromClassName;  // 所属的类
     struct ASTNode* left;
     struct ASTNode* right;
     Token* token;  // 用于错误定位
 } ASTNode;
+
+class PackedClassFunMem {
+   public:
+    PackedClassFunMem() : irFun(nullptr), cls(nullptr) {}
+    enum { FUN_PUBLIC, FUN_PRIVATE, FUN_PROTECTED } accessPermission;
+    IR_Function* irFun;
+    IR_Class* cls;  // 不一定指向用户语句中的类，但该类一定包含该函数且是用户语句中的类的父类
+};

@@ -38,7 +38,8 @@ typedef enum ErrorType {
     ERROR_INC_OR_DEC_OP_VAR,  // 非法自增/减操作数
     ERR_FOR,                  // for语句语法错误
     ERR_NO_VAR,
-    ERR_CLASS_MEMBER_ACCESS,   //类成员访问
+    ERR_CLASS_MEMBER_ACCESS,  // 类成员访问
+    ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED,
 } ErrorType;
 void initLocale(void) noexcept {
     // 设置Locale
@@ -602,9 +603,14 @@ void setError(ErrorType e, int errorLine, const wchar_t* errCode) noexcept {
         }
         case ERR_CLASS_MEMBER_ACCESS: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]类成员访问语法喵～笨蛋！\33["
+                     L"\33[31m[ERR]类成员访问语法犯规了喵～笨蛋！\33["
                      L"0m(位于第%d行)\n"
                      L"\33[36m[NOTE]\33[0m 变量所属类型无该成员也会报错喵；类成员访问 ::= id(类)：id(成员)\n",
+                     errorLine);
+            break;
+        }
+        case ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED: {
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]这个表达式不支持类成员访问喵～\33[0m在第%d行\n",
                      errorLine);
             break;
         }

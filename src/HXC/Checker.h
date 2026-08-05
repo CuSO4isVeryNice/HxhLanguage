@@ -6,7 +6,8 @@
 #include "SymbolTable.h"
 
 extern ASTNode* parseExpression(Token* exp, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                                std::vector<SymbolTable>& outsideTable, int localeScopeIndex, int* err) noexcept;
+                                std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
+                                int* err) noexcept;
 void freeAST(ASTNode* node) noexcept;
 inline IR_Class* getClassByName(const wchar_t* name, IR_Program* currentIRProgram);
 static int getVarIndex(const wchar_t* name, SymbolTable* table);
@@ -339,7 +340,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                 }
                 index++;  // 指向表达式起始位置
                 ASTNode* expNode = parseExpression(fun->bodyTokens, &index, fun->body_token_count, feckPitchTable,
-                                                   &tempLocalScope, tempOutsideScopes, blockNum, &err);
+                                                   &tempLocalScope, tempOutsideScopes, blockNum, program->classes, &err);
                 if (err != 0 || !expNode) {
                     return 255;
                 }

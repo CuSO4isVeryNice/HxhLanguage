@@ -33,8 +33,13 @@ endif()
 
 if(HX_DEBUG STREQUAL "ON")
     set(HX_DEBUG_MACRO 1)
+    add_compile_options(-Wall)
+    add_compile_options(-O0)
+    add_compile_options(-g3)
+    add_compile_options(-ggdb)
 else()
     unset(HX_DEBUG_MACRO) 
+    add_compile_options(-Wno-error)
 endif()
 
 if(LANG STREQUAL "zh_TW")
@@ -71,7 +76,10 @@ else()
     add_compile_options(-fno-strict-aliasing) # 禁用严格别名优化
 endif()
 
-add_compile_options(-O3)
+if(HX_DEBUG STREQUAL "OFF")
+    add_compile_options(-O3)
+endif()
+
 if(WIN32)
     add_executable(hxc.exe src/HXC/Main.cpp)
 else()
@@ -79,6 +87,7 @@ else()
 endif()
 
 add_compile_options(-flto -fno-exceptions)
+
 if(WIN32)
     add_executable(hxvm.exe src/HXVM/Main.cpp)
 else()

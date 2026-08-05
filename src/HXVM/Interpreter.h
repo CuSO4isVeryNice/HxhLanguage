@@ -106,6 +106,9 @@ typedef struct CallFrame {  // 栈帧
 } CallFrame;
 // 栈帧压栈
 inline static int pushCallFrame(Procedure& proc, HxVector<CallFrame*>& frames) {
+#ifdef HX_DEBUG
+    wprintf(LOG_LABEL L"\33[32m进入\33[0m：pushCallFrame()\n");
+#endif
     CallFrame* frame = (CallFrame*)memoryAllocer.hxMalloc(sizeof(CallFrame));
     if (frame == NULL) return -1;
     frame->proc = &proc;
@@ -119,6 +122,9 @@ inline static int pushCallFrame(Procedure& proc, HxVector<CallFrame*>& frames) {
         return -1;
     }
     frames.push_back(frame);
+#ifdef HX_DEBUG
+    wprintf(LOG_LABEL L"\33[31m退出\33[0m：pushCallFrame()\n");
+#endif
     return 0;
 }
 
@@ -907,7 +913,13 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
             }
             int32_t argCount = 0;
             memcpy(&argCount, inst.params[1].value, sizeof(int32_t));
+#ifdef HX_DEBUG
+            wprintf(LOG_LABEL L"调用->参数个数：%d\n", argCount);
+#endif
             int32_t procAddr = 0;
+#ifdef HX_DEBUG
+            wprintf(LOG_LABEL L"调用->过程索引：%d\n", procAddr);
+#endif
             memcpy(&procAddr, inst.params[0].value, sizeof(int32_t));
             Procedure& proc = (obj.procedures[(procAddr)]);
             if (opStack.top < argCount) {
@@ -929,6 +941,9 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
 #endif
                 currentParamOffset += opStack.opStack[i].size;  // 铺完一个，挪动指针
             }
+#ifdef HX_DEBUG
+            wprintf(LOG_LABEL L"调用->从栈中复制参数：完成\n");
+#endif
             opStack.top -= argCount;  // 弹出参数
             // 调用者跳过CAL以防无限递归
             frames[frameTop - 1]->instIndex++;
@@ -936,7 +951,13 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
             break;
         }
         case OP_PRINT_STRING: {
+#ifdef HX_DEBUG
+            wprintf(LOG_LABEL L"\33[32m进入\33[0minterpretInstruction()->OP_PRINT_STRING分支\n");
+#endif
             wprintf(L"%ls", obj.constantPool.constants[*((uint32_t*)inst.params[0].value)].value.string_value);
+#ifdef HX_DEBUG
+            wprintf(LOG_LABEL L"\33[32m退出：\33[0minterpretInstruction()->OP_PRINT_STRING分支\n");
+#endif
             break;
         }
         case OP_RET: {

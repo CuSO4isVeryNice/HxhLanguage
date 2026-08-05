@@ -74,6 +74,7 @@ IR_Program* generateIR(Tokens* tokens, int* err) {
                     free(program);
                     return NULL;
                 }
+                func->kind = IR_Function::GLOBAL_FUN;
                 int index = isFunctionRepeatDefine(func, program->functions);
                 if (index == -255) {
                     // 函数重复定义错误已处理
@@ -274,7 +275,7 @@ void freeIRProgram(IR_Program** program) {
                         }
                     }
                     // 释放私有成员
-                    if (cls->body.privateMembers.size()!=0) {
+                    if (cls->body.privateMembers.size() != 0) {
                         for (int j = 0; j < cls->body.privateMembers.size(); j++) {
                             IR_ClassMember& member = cls->body.privateMembers[j];
                             if (member.type == IR_CM_VARIABLE) {
@@ -314,7 +315,7 @@ void freeIRProgram(IR_Program** program) {
                         }
                     }
                 }
-                if (cls->body.protectedMembers.size()!=0) {
+                if (cls->body.protectedMembers.size() != 0) {
                     for (int j = 0; j < cls->body.protectedMembers.size(); j++) {
                         IR_ClassMember& member = cls->body.protectedMembers[j];
                         if (member.type == IR_CM_VARIABLE) {
@@ -1829,23 +1830,24 @@ static IR_ClassBody parseClassBody(Tokens* tokens, int start_index, int end_inde
         }
         if (wcscmp(tokens->tokens[index].value, L"定义函数") == 0 || wcscmp(tokens->tokens[index].value, L"fun") == 0) {
             IR_Function* func = parseFunction(tokens, &index, err);
+            func->kind = IR_Function::CLASS_FUN_MEM;
             if (func == NULL || *err != 0) {
                 return body;
             }
             if (state == PARSE_PRIVATE_MEMBERS) {
                 IR_ClassMember member = {};
-                    member.type = IR_CM_FUNCTION;
-                    member.data.function = func;
+                member.type = IR_CM_FUNCTION;
+                member.data.function = func;
                 body.privateMembers.push_back(member);
             } else if (state == PARSE_PUBLIC_MEMBERS) {
                 IR_ClassMember member = {};
-                    member.type = IR_CM_FUNCTION;
-                    member.data.function = func;
+                member.type = IR_CM_FUNCTION;
+                member.data.function = func;
                 body.publicMembers.push_back(member);
             } else if (state == PARSE_PROTECTED_MEMBERS) {
                 IR_ClassMember member = {};
-                    member.type = IR_CM_FUNCTION;
-                    member.data.function = func;
+                member.type = IR_CM_FUNCTION;
+                member.data.function = func;
                 body.protectedMembers.push_back(member);
             }
 #ifdef HX_DEBUG
@@ -1867,9 +1869,9 @@ static IR_ClassBody parseClassBody(Tokens* tokens, int start_index, int end_inde
                 return body;
             }
             IR_ClassMember member = {};
-                    member.type = IR_CM_VARIABLE;
-                    member.data.variable = var;
-                body.privateMembers.push_back(member);
+            member.type = IR_CM_VARIABLE;
+            member.data.variable = var;
+            body.privateMembers.push_back(member);
 #ifdef HX_DEBUG
             wchar_t access[4] = {0};
             if (state == PARSE_PRIVATE_MEMBERS) {
@@ -1934,6 +1936,7 @@ static IR_Class* parseClass_EN(Tokens* tokens, int* index, int* err) {
         *err = -1;
         return NULL;
     }
+    _class->fatherIndex = -1;
     if (tokens->tokens[*index].type == TOK_OPR_POINT) {
         if ((*index + 1) >= tokens->count) {
             setError(ERR_DEF_CLASS, tokens->tokens[*index].line, NULL);
@@ -2065,6 +2068,7 @@ static IR_Class* parseClass_CN(Tokens* tokens, int* index, int* err) {
         *err = -1;
         return NULL;
     }
+    _class->fatherIndex = -1;
     _class->name = (wchar_t*)calloc(wcslen(tokens->tokens[*index].value) + 1, sizeof(wchar_t));
     if (!_class->name) {
         *err = -1;
@@ -2255,6 +2259,7 @@ inline static int getDataSize(IR_DataType type) {
         case IR_DT_STRING:
             return sizeof(uint16_t*);  // 用uint16_t规范wchar_t*指针大小
     }
+    return 8 + 4;
 }
 inline IR_Class* getClassByName(const wchar_t* name, IR_Program* currentIRProgram) {
     if (!name || !currentIRProgram) return NULL;

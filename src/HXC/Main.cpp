@@ -7,6 +7,7 @@
 #include <time.h>
 #include <wchar.h>
 
+#include <list>
 #include <string>
 #ifdef _WIN32
 #include <fcntl.h>
@@ -141,9 +142,9 @@ int main(int argc, char* argv[]) {
         end = clock();
         fwprintf(outputStream, L"\33[1;34m[INFO]\33[0m编译完成。共耗时%lfs\n", (double)(end - start) / CLOCKS_PER_SEC);
         return 0;
-    } catch (std::bad_alloc e) {
+    } catch (std::bad_alloc& e) {
         fwprintf(errorStream, L"\33[31m[ERR]\33[0m内存分配失败！\n");
-    } catch (std::exception e) {
+    } catch (std::exception& e) {
         fwprintf(errorStream, L"\33[31m[ERR]\33[0m标准库抛异常力！\n");
         fwprintf(errorStream, L"\33[31m[ERR]\33[0m异常信息：%hs\n", e.what());
     }

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <wchar.h>
+
 #include "ObjectCode.h"
 
 enum NodeBinaryOperator {
@@ -32,7 +33,9 @@ enum NodeUnaryOperator {
 #include "IR.h"
 #include "Lexer.h"
 #include "SymbolTable.h"
-#include "Class.h"
+
+class PackedClassFunMem;
+PackedClassFunMem* findFunInClass(IR_Function& fun, IR_Class* cls, std::vector<IR_Class*>& classTable);
 
 #ifdef HX_DEBUG
 // 递归打印 AST 节点树，node 为当前节点，level 为递归深度，返回 void。
@@ -47,91 +50,91 @@ static void printAstNode(ASTNode* node, int level) {
     }
 
     switch (node->kind) {
-    case NODE_VALUE:
-        fwprintf(logStream, L"\033[1;32m[Value]\033[0m ");
-        if (node->data.value.type.kind == IR_DT_INT) {
-            fwprintf(logStream, L"INT: %d\n", node->data.value.val.i);
-        } else if (node->data.value.type.kind == IR_DT_FLOAT) {
-            fwprintf(logStream, L"FLOAT: %f\n", node->data.value.val.f);
-        } else if (node->data.value.type.kind == IR_DT_CHAR) {
-            fwprintf(logStream, L"CHAR: '%lc'\n", (wchar_t)node->data.value.val.c);
-        } else if (node->data.value.type.kind == IR_DT_STRING) {
-            fwprintf(logStream, L"STRING: \"%ls\"\n", node->data.value.val.s);
-        } else {
-            fwprintf(logStream, L"UNKNOWN TYPE\n");
-        }
-        break;
+        case NODE_VALUE:
+            fwprintf(logStream, L"\033[1;32m[Value]\033[0m ");
+            if (node->data.value.type.kind == IR_DT_INT) {
+                fwprintf(logStream, L"INT: %d\n", node->data.value.val.i);
+            } else if (node->data.value.type.kind == IR_DT_FLOAT) {
+                fwprintf(logStream, L"FLOAT: %f\n", node->data.value.val.f);
+            } else if (node->data.value.type.kind == IR_DT_CHAR) {
+                fwprintf(logStream, L"CHAR: '%lc'\n", (wchar_t)node->data.value.val.c);
+            } else if (node->data.value.type.kind == IR_DT_STRING) {
+                fwprintf(logStream, L"STRING: \"%ls\"\n", node->data.value.val.s);
+            } else {
+                fwprintf(logStream, L"UNKNOWN TYPE\n");
+            }
+            break;
 
-    case NODE_VAR:
-        fwprintf(logStream, L"\033[1;33m[Var]\033[0m name: %ls, index: %d\n", node->data.var.name, node->data.var.index);
-        break;
+        case NODE_VAR:
+            fwprintf(logStream, L"\033[1;33m[Var]\033[0m name: %ls, index: %d\n", node->data.var.name, node->data.var.index);
+            break;
 
-    case NODE_UNARY:
-        fwprintf(logStream, L"\033[1;35m[Unary]\033[0m op: %d\n", node->data.unary.op);
-        switch (node->data.unary.op) {
-        case UAY_OPR_INC:
-            fwprintf(logStream, L"INC (++)\n");
+        case NODE_UNARY:
+            fwprintf(logStream, L"\033[1;35m[Unary]\033[0m op: %d\n", node->data.unary.op);
+            switch (node->data.unary.op) {
+                case UAY_OPR_INC:
+                    fwprintf(logStream, L"INC (++)\n");
+                    break;
+                case UAY_OPR_DIC:
+                    fwprintf(logStream, L"DIC (--)\n");
+                    break;
+            }
+            printAstNode(node->left, level + 1);
             break;
-        case UAY_OPR_DIC:
-            fwprintf(logStream, L"DIC (--)\n");
-            break;
-        }
-        printAstNode(node->left, level + 1);
-        break;
 
-    case NODE_BINARY:
-        fwprintf(logStream, L"\033[1;36m[Binary]\033[0m op: ");
-        switch (node->data.binary.op) {
-        case BIN_OPR_ADD:
-            fwprintf(logStream, L"ADD (+)\n");
+        case NODE_BINARY:
+            fwprintf(logStream, L"\033[1;36m[Binary]\033[0m op: ");
+            switch (node->data.binary.op) {
+                case BIN_OPR_ADD:
+                    fwprintf(logStream, L"ADD (+)\n");
+                    break;
+                case BIN_OPR_SUB:
+                    fwprintf(logStream, L"SUB (-)\n");
+                    break;
+                case BIN_OPR_MUL:
+                    fwprintf(logStream, L"MUL (*)\n");
+                    break;
+                case BIN_OPR_DIV:
+                    fwprintf(logStream, L"DIV (/)\n");
+                    break;
+                case BIN_OPR_SET:
+                    fwprintf(logStream, L"SET (=)\n");
+                    break;
+                case BIN_OPR_EQU:
+                    fwprintf(logStream, L"EQU (==)\n");
+                    break;
+                case BIN_OPR_GT:
+                    fwprintf(logStream, L"GT (>)\n");
+                    break;
+                case BIN_OPR_LT:
+                    fwprintf(logStream, L"LT (<)\n");
+                    break;
+                case BIN_OPR_NEQU:
+                    fwprintf(logStream, L"NEQU (!=)\n");
+                    break;
+                case BIN_OPR_STRING_CONCAT:
+                    fwprintf(logStream, L"STRING_CONCAT\n");
+                    break;
+                case BIN_OPR_CLASS_MEMBER_ACCESS:
+                    fwprintf(logStream, L"BIN_OPR_CLASS_MEMBER_ACCESS\n");
+                    break;
+                default:
+                    fwprintf(logStream, L"UNKNOWN (%d)\n", node->data.binary.op);
+            }
+            printAstNode(node->left, level + 1);
+            printAstNode(node->right, level + 1);
             break;
-        case BIN_OPR_SUB:
-            fwprintf(logStream, L"SUB (-)\n");
+
+        case NODE_FUN_CALL:
+            fwprintf(logStream, L"\033[1;34m[FunCall]\033[0m name: %ls, args: %u\n", node->data.funCall.name,
+                     node->data.funCall.arg_count);
+            for (uint32_t i = 0; i < node->data.funCall.arg_count; i++) {
+                printAstNode(node->data.funCall.args[i], level + 1);
+            }
             break;
-        case BIN_OPR_MUL:
-            fwprintf(logStream, L"MUL (*)\n");
-            break;
-        case BIN_OPR_DIV:
-            fwprintf(logStream, L"DIV (/)\n");
-            break;
-        case BIN_OPR_SET:
-            fwprintf(logStream, L"SET (=)\n");
-            break;
-        case BIN_OPR_EQU:
-            fwprintf(logStream, L"EQU (==)\n");
-            break;
-        case BIN_OPR_GT:
-            fwprintf(logStream, L"GT (>)\n");
-            break;
-        case BIN_OPR_LT:
-            fwprintf(logStream, L"LT (<)\n");
-            break;
-        case BIN_OPR_NEQU:
-            fwprintf(logStream, L"NEQU (!=)\n");
-            break;
-        case BIN_OPR_STRING_CONCAT:
-            fwprintf(logStream, L"STRING_CONCAT\n");
-            break;
-        case BIN_OPR_CLASS_MEMBER_ACCESS:
-            fwprintf(logStream, L"BIN_OPR_CLASS_MEMBER_ACCESS\n");
-            break;   
+
         default:
-            fwprintf(logStream, L"UNKNOWN (%d)\n", node->data.binary.op);
-        }
-        printAstNode(node->left, level + 1);
-        printAstNode(node->right, level + 1);
-        break;
-
-    case NODE_FUN_CALL:
-        fwprintf(logStream, L"\033[1;34m[FunCall]\033[0m name: %ls, args: %u\n", node->data.funCall.name,
-                 node->data.funCall.arg_count);
-        for (uint32_t i = 0; i < node->data.funCall.arg_count; i++) {
-            printAstNode(node->data.funCall.args[i], level + 1);
-        }
-        break;
-
-    default:
-        fwprintf(logStream, L"\033[1;31m[未知]\033[0m\n");
+            fwprintf(logStream, L"\033[1;31m[未知]\033[0m\n");
     }
 }
 extern void printAST(ASTNode* root) {
@@ -149,7 +152,8 @@ extern void printAST(ASTNode* root) {
 // 为当前符号表，outsideTable 为外层作用域符号表，localeScopeIndex 为当前作用域索引，err 为错误码输出，返回解析得到的 AST
 // 根节点。
 extern ASTNode* parseExpression(Token* exp, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                                std::vector<SymbolTable>& outsideTable, int localeScopeIndex, int* err) noexcept;
+                                std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
+                                int* err) noexcept;
 
 // 递归释放 AST 节点及其子节点，node 为待释放的根节点，返回 void。
 void freeAST(ASTNode* node) noexcept {
@@ -183,14 +187,21 @@ static int getPrec(HxTokenType t) {  // 优先级
 // 为函数调用匹配表，table 为当前符号表，outsideTable 为外层作用域符号表，localeScopeIndex 为当前作用域索引，err
 // 为错误码输出，返回解析得到的 AST 节点。
 static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                             std::vector<SymbolTable>& outsideTable, int localeScopeIndex, int* err) noexcept;
+                             std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
+                             int* err) noexcept;
 // 递归解析带优先级的表达式，tokens 为 token 数组，index 为当前解析位置，size 为 token 数量，pitchTable 为函数调用匹配表，table
 // 为当前符号表，outsideTable 为外层作用域符号表，localeScopeIndex 为当前作用域索引，err 为错误码输出，min_prec
 // 为当前最小优先级，返回解析得到的 AST 节点。
 static ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                             std::vector<SymbolTable>& outsideTable, int localeScopeIndex, int* err, int min_prec) noexcept;
-static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                             std::vector<SymbolTable>& outsideTable, int localeScopeIndex, wchar_t* fromClass, int* err) {
+                             std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
+                             int* err, int min_prec) noexcept;
+static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int size, FunCallPitchTable& pitchTable,
+                             SymbolTable* table, std::vector<SymbolTable>& outsideTable, int localeScopeIndex,
+                             wchar_t* fromClass, std::vector<IR_Class*> classTable, int* err) {
+#ifdef HX_DEBUG
+    log(L"------调用函数parseAfterID------");
+    log(L"  调用函数parseAfterID---> fromClass = %ls", fromClass ? fromClass : L"(null)");
+#endif
     Token* curr = &tokens[*index];
     ASTNode* node = (ASTNode*)calloc(1, sizeof(ASTNode));
     if (!node) {
@@ -252,43 +263,43 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
                 return NULL;
             }
             switch (node->resultType.kind) {  // 决定结果类型
-            case IR_DT_INT:
-            case IR_DT_FLOAT:
-            case IR_DT_CHAR:
-            case IR_DT_STRING:
-            case IR_DT_VOID:
-            case IR_DT_CUSTOM:
-            case IR_DT_BOOL:
-                setError(ERR_EXP, curr->line, curr->value);
-                free(arrayAccessNode);
-                *err = 255;
-                return NULL;
-                break;
-            default:
-                if (node->resultType.kind == IR_DT_INT_ARR)
-                    node->resultType.kind = IR_DT_INT;
-                else if (node->resultType.kind == IR_DT_FLOAT_ARR)
-                    node->resultType.kind = IR_DT_FLOAT;
-                else if (node->resultType.kind == IR_DT_CHAR_ARR)
-                    node->resultType.kind = IR_DT_CHAR;
-                else if (node->resultType.kind == IR_DT_STRING_ARR)
-                    node->resultType.kind = IR_DT_STRING;
-                else if (node->resultType.kind == IR_DT_BOOL_ARR)
-                    node->resultType.kind = IR_DT_BOOL;
-                else if (node->resultType.kind == IR_DT_CUSTOM_ARR)
-                    node->resultType.kind = IR_DT_CUSTOM;
-                break;
+                case IR_DT_INT:
+                case IR_DT_FLOAT:
+                case IR_DT_CHAR:
+                case IR_DT_STRING:
+                case IR_DT_VOID:
+                case IR_DT_CUSTOM:
+                case IR_DT_BOOL:
+                    setError(ERR_EXP, curr->line, curr->value);
+                    free(arrayAccessNode);
+                    *err = 255;
+                    return NULL;
+                    break;
+                default:
+                    if (node->resultType.kind == IR_DT_INT_ARR)
+                        node->resultType.kind = IR_DT_INT;
+                    else if (node->resultType.kind == IR_DT_FLOAT_ARR)
+                        node->resultType.kind = IR_DT_FLOAT;
+                    else if (node->resultType.kind == IR_DT_CHAR_ARR)
+                        node->resultType.kind = IR_DT_CHAR;
+                    else if (node->resultType.kind == IR_DT_STRING_ARR)
+                        node->resultType.kind = IR_DT_STRING;
+                    else if (node->resultType.kind == IR_DT_BOOL_ARR)
+                        node->resultType.kind = IR_DT_BOOL;
+                    else if (node->resultType.kind == IR_DT_CUSTOM_ARR)
+                        node->resultType.kind = IR_DT_CUSTOM;
+                    break;
             }
 
             // 解析索引表达式
-            ASTNode* indexExpr =
-                parseExprRec(tokens, &exprStartIndex, *index, pitchTable, table, outsideTable, localeScopeIndex, err, 0);
+            ASTNode* indexExpr = parseExprRec(tokens, &exprStartIndex, *index, pitchTable, table, outsideTable,
+                                              localeScopeIndex, classTable, err, 0);
             if (*err != 0 || !indexExpr) {
                 free(arrayAccessNode);
                 return NULL;
             }
             if (indexExpr->resultType.kind != IR_DT_INT && indexExpr->resultType.kind != IR_DT_CHAR &&
-                    indexExpr->resultType.kind != IR_DT_BOOL && indexExpr->resultType.kind != IR_DT_FLOAT) {
+                indexExpr->resultType.kind != IR_DT_BOOL && indexExpr->resultType.kind != IR_DT_FLOAT) {
                 setError(ERR_EXP, curr->line, curr->value);  // 索引表达式必须是整数类型
                 *err = 255;
                 free(arrayAccessNode);
@@ -323,8 +334,8 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
 
                 movNode->left = arrayAccessNode;  // 左边是数组访问节点
                 // 连等支持
-                movNode->right = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, err,
-                                              getPrec(TOK_OPR_SET));
+                movNode->right = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex,
+                                              classTable, err, getPrec(TOK_OPR_SET));
 
                 if (*err) {
                     free(movNode);
@@ -380,15 +391,15 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
                     tempIndex++;
                 }
 
-                ASTNode* arg =
-                    parseExpression(tokens, &argIndex, tempIndex, pitchTable, table, outsideTable, localeScopeIndex, err);
+                ASTNode* arg = parseExpression(tokens, &argIndex, tempIndex, pitchTable, table, outsideTable, localeScopeIndex,
+                                               classTable, err);
                 if (*err != 0) {
                     freeAST(funCallNode);
                     return NULL;
                 }
 
                 funCallNode->data.funCall.args = (ASTNode**)realloc(
-                                                     funCallNode->data.funCall.args, sizeof(ASTNode*) * (funCallNode->data.funCall.arg_count + 1));
+                    funCallNode->data.funCall.args, sizeof(ASTNode*) * (funCallNode->data.funCall.arg_count + 1));
                 funCallNode->data.funCall.args[funCallNode->data.funCall.arg_count] = arg;
                 funCallNode->data.funCall.arg_count++;
                 // parseExpression 会执行 (*index)--
@@ -409,52 +420,95 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             log(L"获取函数索引和返回值类型(table->fun.size()=%d)", table->fun.size());
 #endif
             // 获取函数索引和返回值类型
-            if(fromClass == NULL) if (table->fun.size() > 0) {
-                for (uint32_t i = 0; i < table->fun.size(); i++) {
+            if (fromClass == NULL) {
+                if (table->fun.size() > 0) {
+                    for (uint32_t i = 0; i < table->fun.size(); i++) {
 #ifdef HX_DEBUG
-                    log(L"获取函数索引和返回值类型->遍历到：%ls", table->fun[i]->name);
+                        log(L"获取函数索引和返回值类型->遍历到：%ls", table->fun[i]->name);
 #endif
-                    // 名字
-                    IR_Function* f = table->fun[i];
-                    if (!f) continue;
-                    if (wcscmp(f->name, funCallNode->data.funCall.name) == 0) {
-                        // 参数个数
-                        if (f->paramCount != funCallNode->data.funCall.arg_count) {
-                            continue;
-                        }
-                        bool match = true;
-                        for (int j = 0; j < funCallNode->data.funCall.arg_count; j++) {
-                            if (funCallNode->data.funCall.args[j]->resultType.kind != f->params[j].type.kind) {
-                                match = false;
-                                break;
+                        // 名字
+                        IR_Function* f = table->fun[i];
+                        if (!f) continue;
+                        if (wcscmp(f->name, funCallNode->data.funCall.name) == 0) {
+                            // 参数个数
+                            if (f->paramCount != funCallNode->data.funCall.arg_count) {
+                                continue;
                             }
-                            if (funCallNode->data.funCall.args[j]->resultType.kind == IR_DT_CUSTOM) {
-                                if (wcscmp(funCallNode->data.funCall.args[j]->resultType.customTypeName,
-                                           f->params[j].type.customTypeName) != 0) {
+                            bool match = true;
+                            for (int j = 0; j < funCallNode->data.funCall.arg_count; j++) {
+                                if (funCallNode->data.funCall.args[j]->resultType.kind != f->params[j].type.kind) {
                                     match = false;
                                     break;
                                 }
+                                if (funCallNode->data.funCall.args[j]->resultType.kind == IR_DT_CUSTOM) {
+                                    if (wcscmp(funCallNode->data.funCall.args[j]->resultType.customTypeName,
+                                               f->params[j].type.customTypeName) != 0) {
+                                        match = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (match) {
+                                // f->isUsed =
+                                // true;
+                                funCallNode->data.funCall.pitch = pitchTable.enter(f);
+                                funCallNode->data.funCall.pitch->fun = f;
+                                f->pitch = funCallNode->data.funCall.pitch;
+                                funCallNode->data.funCall.ret_type = f->returnType;
+                                funCallNode->resultType = f->returnType;
+#ifdef HX_DEBUG
+                                log(L"找到函数%ls, 索引：%d", f->name, (int)i);
+#endif
+                                return funCallNode;
                             }
                         }
-                        if (match) {
-                            // f->isUsed =
-                            // true;
-                            funCallNode->data.funCall.pitch = pitchTable.enter(f);
-                            funCallNode->data.funCall.pitch->fun = f;
-                            f->pitch = funCallNode->data.funCall.pitch;
-                            funCallNode->data.funCall.ret_type = f->returnType;
-                            funCallNode->resultType = f->returnType;
-                            return funCallNode;
-                        }
+                    }
+                    setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
+                    *err = 255;
+                    return NULL;
+                }
+            } else {
+                IR_Class* fromClassPtr = nullptr;
+                for (int i = 0; i < classTable.size(); i++) {
+                    if (wcscmp(classTable[i]->name, fromClass) == 0) {
+                        fromClassPtr = classTable[i];
+                        break;
                     }
                 }
-                setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
-                *err = 255;
-                return NULL;
-            } else {
-                setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
-                *err = 255;
-                return NULL;
+                if (!fromClassPtr) {
+                    setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, fromClass);
+                    *err = 255;
+                    return NULL;
+                }
+
+                // 构造临时 IR_Function 用于查找匹配的成员函数
+                IR_Function tempFun = {};
+                tempFun.name = funCallNode->data.funCall.name;
+                tempFun.paramCount = funCallNode->data.funCall.arg_count;
+                tempFun.params = (IR_FunctionParam*)calloc(tempFun.paramCount, sizeof(IR_FunctionParam));
+                if (!tempFun.params) {
+                    *err = -1;
+                    return NULL;
+                }
+                for (uint32_t i = 0; i < tempFun.paramCount; i++) {
+                    tempFun.params[i].type = funCallNode->data.funCall.args[i]->resultType;
+                }
+
+                PackedClassFunMem* packed = findFunInClass(tempFun, fromClassPtr, classTable);
+                free(tempFun.params);  // 释放临时参数数组
+
+                if (packed == nullptr) {
+                    setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
+                    *err = 255;
+                    return NULL;
+                }
+
+                funCallNode->data.funCall.pitch = pitchTable.enter(packed->irFun);
+                funCallNode->data.funCall.ret_type = packed->irFun->returnType;
+                funCallNode->resultType = packed->irFun->returnType;
+                delete packed;  // 释放包装对象，irFun 仍有效
+
+                return funCallNode;
             }
             return funCallNode;
         }
@@ -485,8 +539,8 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
 
             movNode->left = node;
             // 连等支持
-            movNode->right = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, err,
-                                          getPrec(TOK_OPR_SET));
+            movNode->right = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable,
+                                          err, getPrec(TOK_OPR_SET));
 
             if (*err) {
                 free(movNode);
@@ -547,8 +601,8 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             decNode->resultType = node->resultType;
             (*index)++;
             return decNode;
-        } else if(next->type == TOK_OPR_COLON) {
-            if(node->resultType.kind != IR_DT_CUSTOM) {
+        } else if (next->type == TOK_OPR_COLON) {
+            if (node->resultType.kind != IR_DT_CUSTOM) {
                 setError(ERR_CLASS_MEMBER_ACCESS, tokens[*index].line, NULL);
                 *err = 255;
                 freeAST(node);
@@ -566,8 +620,8 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
                 *err = 255;
                 return NULL;
             }
-            (*index)++;  //ID
-            if(tokens[*index].type != TOK_ID) {
+            (*index)++;  // ID
+            if (tokens[*index].type != TOK_ID) {
                 setError(ERR_CLASS_MEMBER_ACCESS, tokens[*index].line, NULL);
                 *err = 255;
                 return NULL;
@@ -577,9 +631,11 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             classMemberAccessNode->kind = NODE_BINARY;
             classMemberAccessNode->data.binary.op = BIN_OPR_CLASS_MEMBER_ACCESS;
             classMemberAccessNode->left = node;
-            
-            classMemberAccessNode->right = parseAfterID(classMemberAccessNode, tokens, index, size, pitchTable, table,  outsideTable, localeScopeIndex, node->resultType.customTypeName, err);
-            if(classMemberAccessNode->right == NULL) {
+
+            classMemberAccessNode->right =
+                parseAfterID(classMemberAccessNode, tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex,
+                             node->resultType.customTypeName, classTable, err);
+            if (classMemberAccessNode->right == NULL) {
                 return NULL;
             }
             return classMemberAccessNode;
@@ -605,7 +661,8 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
 }
 // 解析数字、变量、括号
 static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                             std::vector<SymbolTable>& outsideTable, int localeScopeIndex, int* err) noexcept {
+                             std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
+                             int* err) noexcept {
     if (*index >= size) {
         *err = 255;
         return NULL;
@@ -649,7 +706,8 @@ static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTa
 
             // 解析后面的表达式 (调用 parsePrimary 可以同时支持
             // (int)a 和 (int)(a+b))
-            ASTNode* inner = parsePrimary(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, err);
+            ASTNode* inner =
+                parsePrimary(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err);
             if (*err != 0 || !inner) return NULL;
 
             // 对比实际类型与目标类型，若不同则打上转换指令标签
@@ -674,7 +732,8 @@ static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTa
 
         } else {
             // 不是强制转换，而是普通的算术括号表达式
-            ASTNode* inner = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, err, 0);
+            ASTNode* inner =
+                parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, 0);
             if (*err == 0 && (*index < size && tokens[*index].type == TOK_OPR_RQUOTE)) {
                 (*index)++;  // 吃掉右括号
                 return inner;
@@ -720,7 +779,8 @@ static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTa
     // 处理变量
     if (tokens[*index].type == TOK_ID) {
         // 先不管有没有等号，统一先把当前标识符解析成变量节点
-        return parseAfterID(NULL, tokens, index, size, pitchTable, table,  outsideTable, localeScopeIndex,  NULL, err);
+        return parseAfterID(NULL, tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, NULL, classTable,
+                            err);
     }
 
     *err = 255;
@@ -747,8 +807,9 @@ IR_DataType getResultTypeForBinaryOp(IR_DataType left, IR_DataType right) noexce
 // 为函数调用匹配表，table 为当前符号表，outsideTable 为外层作用域符号表，localeScopeIndex 为当前作用域索引，err
 // 为错误码输出，min_prec 为当前最小优先级，返回表达式 AST 根节点。
 ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                      std::vector<SymbolTable>& outsideTable, int localeScopeIndex, int* err, int min_prec) noexcept {
-    ASTNode* lhs = parsePrimary(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, err);
+                      std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable, int* err,
+                      int min_prec) noexcept {
+    ASTNode* lhs = parsePrimary(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err);
     if (*err != 0 || lhs == NULL) return lhs;
 
     while (*index < size) {
@@ -760,7 +821,8 @@ ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pi
         // 消耗掉运算符
         (*index)++;
         // 递归解析右侧操作数
-        ASTNode* rhs = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, err, prec + 1);
+        ASTNode* rhs =
+            parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, prec + 1);
 
         if (rhs == NULL) {
             if (*err == 0) *err = 255;
@@ -787,91 +849,91 @@ ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pi
             if (combined->left->resultType.kind == IR_DT_STRING || combined->right->resultType.kind == IR_DT_STRING) {
                 ASTNode* node = combined->left;
                 switch (node->resultType.kind) {
-                case IR_DT_INT:
-                    node->typeCast = OP_INT_TO_STRING;
-                    break;
-                case IR_DT_FLOAT:
-                    node->typeCast = OP_INT_TO_STRING;
-                    break;
-                case IR_DT_CHAR:
-                    node->typeCast = OP_CHAR_TO_STRING;
-                    break;
-                case IR_DT_BOOL:
-                    node->typeCast = OP_INT_TO_STRING;
-                    break;
-                case IR_DT_STRING:
-                    break;
+                    case IR_DT_INT:
+                        node->typeCast = OP_INT_TO_STRING;
+                        break;
+                    case IR_DT_FLOAT:
+                        node->typeCast = OP_INT_TO_STRING;
+                        break;
+                    case IR_DT_CHAR:
+                        node->typeCast = OP_CHAR_TO_STRING;
+                        break;
+                    case IR_DT_BOOL:
+                        node->typeCast = OP_INT_TO_STRING;
+                        break;
+                    case IR_DT_STRING:
+                        break;
                 }
                 node = combined->right;
                 switch (node->resultType.kind) {
-                case IR_DT_INT:
-                    node->typeCast = OP_INT_TO_STRING;
-                    break;
-                case IR_DT_FLOAT:
-                    node->typeCast = OP_INT_TO_STRING;
-                    break;
-                case IR_DT_CHAR:
-                    node->typeCast = OP_CHAR_TO_STRING;
-                    break;
-                case IR_DT_BOOL:
-                    node->typeCast = OP_INT_TO_STRING;
-                    break;
-                case IR_DT_STRING:
-                    break;
+                    case IR_DT_INT:
+                        node->typeCast = OP_INT_TO_STRING;
+                        break;
+                    case IR_DT_FLOAT:
+                        node->typeCast = OP_INT_TO_STRING;
+                        break;
+                    case IR_DT_CHAR:
+                        node->typeCast = OP_CHAR_TO_STRING;
+                        break;
+                    case IR_DT_BOOL:
+                        node->typeCast = OP_INT_TO_STRING;
+                        break;
+                    case IR_DT_STRING:
+                        break;
                 }
             } else if (combined->left->resultType.kind == IR_DT_FLOAT || combined->right->resultType.kind == IR_DT_FLOAT) {
                 ASTNode* node = combined->left;
                 switch (node->resultType.kind) {
-                case IR_DT_INT:
-                    node->typeCast = OP_INT_TO_FLOAT;
-                    break;
-                case IR_DT_FLOAT:
-                    break;
-                case IR_DT_CHAR:
-                    node->typeCast = OP_CHAR_TO_FLOAT;
-                    break;
-                case IR_DT_BOOL:
-                    node->typeCast = OP_INT_TO_FLOAT;
-                    break;
+                    case IR_DT_INT:
+                        node->typeCast = OP_INT_TO_FLOAT;
+                        break;
+                    case IR_DT_FLOAT:
+                        break;
+                    case IR_DT_CHAR:
+                        node->typeCast = OP_CHAR_TO_FLOAT;
+                        break;
+                    case IR_DT_BOOL:
+                        node->typeCast = OP_INT_TO_FLOAT;
+                        break;
                 }
                 node = combined->right;
                 switch (node->resultType.kind) {
-                case IR_DT_INT:
-                    node->typeCast = OP_INT_TO_FLOAT;
-                    break;
-                case IR_DT_FLOAT:
-                    break;
-                case IR_DT_CHAR:
-                    node->typeCast = OP_CHAR_TO_FLOAT;
-                    break;
-                case IR_DT_BOOL:
-                    node->typeCast = OP_INT_TO_FLOAT;
-                    break;
+                    case IR_DT_INT:
+                        node->typeCast = OP_INT_TO_FLOAT;
+                        break;
+                    case IR_DT_FLOAT:
+                        break;
+                    case IR_DT_CHAR:
+                        node->typeCast = OP_CHAR_TO_FLOAT;
+                        break;
+                    case IR_DT_BOOL:
+                        node->typeCast = OP_INT_TO_FLOAT;
+                        break;
                 }
             } else if (combined->left->resultType.kind == IR_DT_INT || combined->right->resultType.kind == IR_DT_INT) {
                 ASTNode* node = combined->left;
                 switch (node->resultType.kind) {
-                case IR_DT_INT:
-                    break;
-                case IR_DT_FLOAT:
-                    break;
-                case IR_DT_CHAR:
-                    node->typeCast = OP_CHAR_TO_INT;
-                    break;
-                case IR_DT_BOOL:
-                    break;
+                    case IR_DT_INT:
+                        break;
+                    case IR_DT_FLOAT:
+                        break;
+                    case IR_DT_CHAR:
+                        node->typeCast = OP_CHAR_TO_INT;
+                        break;
+                    case IR_DT_BOOL:
+                        break;
                 }
                 node = combined->right;
                 switch (node->resultType.kind) {
-                case IR_DT_INT:
-                    break;
-                case IR_DT_FLOAT:
-                    break;
-                case IR_DT_CHAR:
-                    node->typeCast = OP_CHAR_TO_INT;
-                    break;
-                case IR_DT_BOOL:
-                    break;
+                    case IR_DT_INT:
+                        break;
+                    case IR_DT_FLOAT:
+                        break;
+                    case IR_DT_CHAR:
+                        node->typeCast = OP_CHAR_TO_INT;
+                        break;
+                    case IR_DT_BOOL:
+                        break;
                 }
             }
         }
@@ -926,14 +988,15 @@ ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pi
     return lhs;
 }
 ASTNode* parseExpression(Token* exp, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
-                         std::vector<SymbolTable>& outsideTable, int localeScopeIndex, int* err) noexcept {
+                         std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
+                         int* err) noexcept {
 #ifdef HX_DEBUG
     log(L"\n---------分析表达式");
 #endif
     if (!exp || !index || !err || !table) return NULL;
     *err = 0;
 
-    ASTNode* root = parseExprRec(exp, index, size, pitchTable, table, outsideTable, localeScopeIndex, err, 0);
+    ASTNode* root = parseExprRec(exp, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, 0);
     if (*err == 0 && root != NULL && *index < size) {
         if (exp[*index].type != TOK_END) {
             *err = 255;
