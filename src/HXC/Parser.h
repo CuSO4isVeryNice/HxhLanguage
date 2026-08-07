@@ -160,11 +160,11 @@ void freeAST(ASTNode* node) noexcept {
     if (!node) return;
     freeAST(node->left);
     freeAST(node->right);
-    if (node->kind == NODE_BINARY && node->data.binary.varName != NULL) free(node->data.binary.varName);
-    if (node->kind == NODE_UNARY && node->data.unary.varName != NULL) free(node->data.unary.varName);
-    if (node->kind == NODE_VAR) free(node->data.var.name);
-    if (node->kind == NODE_VALUE && node->data.value.type.kind == IR_DT_STRING) free(node->data.value.val.s);
-    free(node);
+    if (node->kind == NODE_BINARY && node->data.binary.varName != NULL) hxFree(node->data.binary.varName);
+    if (node->kind == NODE_UNARY && node->data.unary.varName != NULL) hxFree(node->data.unary.varName);
+    if (node->kind == NODE_VAR) hxFree(node->data.var.name);
+    if (node->kind == NODE_VALUE && node->data.value.type.kind == IR_DT_STRING) hxFree(node->data.value.val.s);
+    hxFree(node);
 }
 // 在指定符号表中查找变量名对应的索引，name 为变量名，table 为符号表，返回变量索引；未找到时返回 -1。
 static int getVarIndex(const wchar_t* name, SymbolTable* table) {
@@ -259,7 +259,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             if (openBrackets != closeBrackets) {
                 setError(ERR_EXP, curr->line, curr->value);  // 缺少右括号
                 *err = 255;
-                free(arrayAccessNode);
+                hxFree(arrayAccessNode);
                 return NULL;
             }
             switch (node->resultType.kind) {  // 决定结果类型
@@ -271,7 +271,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
                 case IR_DT_CUSTOM:
                 case IR_DT_BOOL:
                     setError(ERR_EXP, curr->line, curr->value);
-                    free(arrayAccessNode);
+                    hxFree(arrayAccessNode);
                     *err = 255;
                     return NULL;
                     break;
@@ -295,14 +295,14 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             ASTNode* indexExpr = parseExprRec(tokens, &exprStartIndex, *index, pitchTable, table, outsideTable,
                                               localeScopeIndex, classTable, err, 0);
             if (*err != 0 || !indexExpr) {
-                free(arrayAccessNode);
+                hxFree(arrayAccessNode);
                 return NULL;
             }
             if (indexExpr->resultType.kind != IR_DT_INT && indexExpr->resultType.kind != IR_DT_CHAR &&
                 indexExpr->resultType.kind != IR_DT_BOOL && indexExpr->resultType.kind != IR_DT_FLOAT) {
                 setError(ERR_EXP, curr->line, curr->value);  // 索引表达式必须是整数类型
                 *err = 255;
-                free(arrayAccessNode);
+                hxFree(arrayAccessNode);
                 freeAST(indexExpr);
                 return NULL;
             }
@@ -312,7 +312,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             if (*index >= size) {
                 setError(ERR_NO_END, curr->line, NULL);
                 *err = 255;
-                free(arrayAccessNode);
+                hxFree(arrayAccessNode);
                 return NULL;
             }
             if (tokens[*index].type == TOK_OPR_SET) {  // sym[val] = exp
@@ -338,7 +338,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
                                               classTable, err, getPrec(TOK_OPR_SET));
 
                 if (*err) {
-                    free(movNode);
+                    hxFree(movNode);
                     return NULL;
                 }
                 // 类型推导
@@ -495,7 +495,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
                 }
 
                 PackedClassFunMem* packed = findFunInClass(tempFun, fromClassPtr, classTable);
-                free(tempFun.params);  // 释放临时参数数组
+                hxFree(tempFun.params);  // 释放临时参数数组
 
                 if (packed == nullptr) {
                     setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
@@ -543,7 +543,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
                                           err, getPrec(TOK_OPR_SET));
 
             if (*err) {
-                free(movNode);
+                hxFree(movNode);
                 return NULL;
             }
             // 类型推导
@@ -569,7 +569,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             incNode->left = node;
 
             if (*err) {
-                free(incNode);
+                hxFree(incNode);
                 return NULL;
             }
             incNode->resultType = node->resultType;
@@ -595,7 +595,7 @@ static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int 
             decNode->left = node;
 
             if (*err) {
-                free(decNode);
+                hxFree(decNode);
                 return NULL;
             }
             decNode->resultType = node->resultType;
@@ -679,7 +679,7 @@ static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTa
         }
         node->token = curr;
         (*index)++;
-        free(node);  // 括号本身不产生节点
+        hxFree(node);  // 括号本身不产生节点
 
         // 判断是否是强制类型转换，例如 (int), (float), (char)
         bool isCast = false;

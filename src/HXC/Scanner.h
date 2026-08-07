@@ -57,45 +57,45 @@ static int UTF8ToWStr(const char* ptr, size_t len, wchar_t** out) noexcept {
             i += 1;
         } else if ((c >> 5) == 0x6) {
             if (i + 1 >= len) {
-                free(wbuf);
+                hxFree(wbuf);
                 return -1;
             }
             unsigned char c1 = (unsigned char)ptr[i + 1];
             if ((c1 >> 6) != 0x2) {
-                free(wbuf);
+                hxFree(wbuf);
                 return -1;
             }
             codepoint = ((c & 0x1F) << 6) | (c1 & 0x3F);
             i += 2;
         } else if ((c >> 4) == 0xE) {
             if (i + 2 >= len) {
-                free(wbuf);
+                hxFree(wbuf);
                 return -1;
             }
             unsigned char c1 = (unsigned char)ptr[i + 1];
             unsigned char c2 = (unsigned char)ptr[i + 2];
             if ((c1 >> 6) != 0x2 || (c2 >> 6) != 0x2) {
-                free(wbuf);
+                hxFree(wbuf);
                 return -1;
             }
             codepoint = ((c & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
             i += 3;
         } else if ((c >> 3) == 0x1E) {
             if (i + 3 >= len) {
-                free(wbuf);
+                hxFree(wbuf);
                 return -1;
             }
             unsigned char c1 = (unsigned char)ptr[i + 1];
             unsigned char c2 = (unsigned char)ptr[i + 2];
             unsigned char c3 = (unsigned char)ptr[i + 3];
             if ((c1 >> 6) != 0x2 || (c2 >> 6) != 0x2 || (c3 >> 6) != 0x2) {
-                free(wbuf);
+                hxFree(wbuf);
                 return -1;
             }
             codepoint = ((c & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
             i += 4;
         } else {
-            free(wbuf);
+            hxFree(wbuf);
             return -1;
         }
 
@@ -109,7 +109,7 @@ static int UTF8ToWStr(const char* ptr, size_t len, wchar_t** out) noexcept {
                 wbuf[wi++] = high;
                 wbuf[wi++] = low;
             } else {
-                free(wbuf);
+                hxFree(wbuf);
                 return -1;
             }
         } else {
@@ -154,7 +154,7 @@ int readSourceFile(FILE* fp, wchar_t** src) noexcept {
     size_t r = fread(buf, 1, size, fp);
     fclose(fp);
     if (r != size) {
-        free(buf);
+        hxFree(buf);
         return -1;
     }
     buf[size] = '\0';
@@ -164,38 +164,38 @@ int readSourceFile(FILE* fp, wchar_t** src) noexcept {
         // UTF-8 BOM
         offset = 3;
         int rc = UTF8ToWStr(buf + offset, size - offset, src);
-        free(buf);
+        hxFree(buf);
         return rc;
     } else if (size >= 2 && (unsigned char)buf[0] == 0xFF && (unsigned char)buf[1] == 0xFE) {
         // UTF-16 LE BOM
         size_t bytes = size - 2;
         if (bytes % 2 != 0) {
-            free(buf);
+            hxFree(buf);
             return -1;
         }
         size_t wcnt = bytes / 2;
         wchar_t* out = (wchar_t*)malloc((wcnt + 1) * sizeof(wchar_t));
         if (!out) {
-            free(buf);
+            hxFree(buf);
             return -1;
         }
         // 在小端平台 (Windows) 直接 memcpy 即可
         memcpy(out, buf + 2, bytes);
         out[wcnt] = L'\0';
-        free(buf);
+        hxFree(buf);
         *src = out;
         return 0;
     } else if (size >= 2 && (unsigned char)buf[0] == 0xFE && (unsigned char)buf[1] == 0xFF) {
         // UTF-16 BE BOM: 需要字节交换后复制
         size_t bytes = size - 2;
         if (bytes % 2 != 0) {
-            free(buf);
+            hxFree(buf);
             return -1;
         }
         size_t wcnt = bytes / 2;
         wchar_t* out = (wchar_t*)malloc((wcnt + 1) * sizeof(wchar_t));
         if (!out) {
-            free(buf);
+            hxFree(buf);
             return -1;
         }
         // 逐字交换字节对
@@ -207,13 +207,13 @@ int readSourceFile(FILE* fp, wchar_t** src) noexcept {
             out[i] = (wchar_t)v_le;
         }
         out[wcnt] = L'\0';
-        free(buf);
+        hxFree(buf);
         *src = out;
         return 0;
     } else {
         // 无BOM
         int rc = UTF8ToWStr(buf, size, src);
-        free(buf);
+        hxFree(buf);
         return rc;
     }
 }

@@ -308,6 +308,8 @@ ObjectCode* generateObjectCode(IR_Program* program, int* err) {
     FunCallPitchTable pitchTable;
     std::vector<Procedure*> objFun;
     std::vector<std::vector<SymbolTable>> symbols;
+    
+    size_t orginalFunCount = program->functions.size();
 
     // 把类中的函数全部塞进program->functions中，方便统一处理
     for (int i = 0; i < program->classes.size(); i++) {
@@ -850,6 +852,7 @@ ObjectCode* generateObjectCode(IR_Program* program, int* err) {
         listObjectCode_Proc(objFun.at(i));
     }
 #endif
+    program->functions.resize(orginalFunCount);
     return objCode;
 }
 int getClassIndexByName(wchar_t* name, IR_Class** classTable, int classTableSize) {
@@ -3105,18 +3108,6 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
 #ifdef HX_DEBUG
             log(L"分析右侧->函数调用");
 #endif
-            // 仅用于findFunInClass
-            /*IR_Function toIRFun = {};
-            toIRFun.name = right->data.funCall.name;   //浅拷贝
-            toIRFun.paramCount = right->data.funCall.arg_count;
-            toIRFun.params = (IR_FunctionParam*)calloc((toIRFun.paramCount), sizeof(IR_FunctionParam));  //params深拷贝
-            if(!(toIRFun.params)) {
-                *err = 255;
-                return;
-            }
-            for(int i = 0; i < toIRFun.paramCount; i++) {
-                toIRFun.params[i].type = right->data.funCall.args[i]->resultType;
-            }*/
 #ifdef HX_DEBUG
             log(L"开始查找函数成员\n -->right->data.funCall.pitch: %q", right->data.funCall.pitch);
 #endif
@@ -3479,11 +3470,11 @@ extern void freeObjectCode(ObjectCode** obj) {
     if ((*obj)->constantPool.constants) {
         for (int i = 0; i < (*obj)->constantPool.size; i++) {
             if ((*obj)->constantPool.constants[i].value.string_value) {
-                free((*obj)->constantPool.constants[i].value.string_value);
+                hxFree((*obj)->constantPool.constants[i].value.string_value);
                 (*obj)->constantPool.constants[i].value.string_value = NULL;
             }
         }
-        free((*obj)->constantPool.constants);
+        hxFree((*obj)->constantPool.constants);
         (*obj)->constantPool.constants = NULL;
     }
     for (int i = 0; i < (*obj)->procedures.size(); i++) {

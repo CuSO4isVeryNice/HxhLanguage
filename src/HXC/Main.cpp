@@ -1,4 +1,5 @@
 #include "config.h"
+
 #define HXC_VERSION 0.114f
 #include "GUIMenu/GUIMenu.h"
 // #define HX_DEBUG
@@ -6,7 +7,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <wchar.h>
-
+#include <cstdlib>
 #include <list>
 #include <string>
 #ifdef _WIN32
@@ -18,6 +19,11 @@
 FILE* outputStream = NULL;
 FILE* logStream = NULL;
 FILE* errorStream = NULL;
+inline void hxFree(void* ptr) {
+    if(ptr == nullptr) return;
+    free(ptr);
+    ptr = nullptr;
+}
 #include "Error.h"
 #include "Generator.h"
 #include "IR.h"

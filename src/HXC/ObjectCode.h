@@ -18,6 +18,7 @@ enum {
     OP_STORE_ARRAY_ELEMENT,      // 将栈顶值存入数组元素, 索引用栈顶  STORE_ARRAY_ELEMENT <offest(u32)> <size(按u32读>
     OP_LOAD_ELEMENT_FROM_ARRAY,  // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)> <size(按u32读，
                                  // type为压栈后槽位标记的类型)>
+    OP_LOAD_VARIABLE_FROM_ADDRESS,   //1,读取并弹出次栈顶中的地址，2、加上偏移量 3、压栈          
     OP_POP,                      // 弹出
     OP_STORE_VAR,                // 将栈顶值存入变量  OP_STORE_VAR <offest(u32)>
     // <copySize(u32, type表示栈顶应转换的类型)>

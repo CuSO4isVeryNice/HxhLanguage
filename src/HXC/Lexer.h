@@ -177,7 +177,7 @@ Tokens* lex(wchar_t* src, int* err) noexcept {
             if (!(tokens->tokens[token_index].value)) MEM_FAIL;
             if (len != 0) wcsncpy(tokens->tokens[token_index].value, &(src[start_index]), len);
             wchar_t* escapedString = escape(tokens->tokens[token_index].value);
-            free(tokens->tokens[token_index].value);
+            hxFree(tokens->tokens[token_index].value);
             tokens->tokens[token_index].value = escapedString;
             tokens->tokens[token_index].line = line;
 #ifdef HX_DEBUG
@@ -265,7 +265,7 @@ Tokens* lex(wchar_t* src, int* err) noexcept {
             if (!(tokens->tokens[token_index].value)) MEM_FAIL;
             if (len != 0) wcsncpy(tokens->tokens[token_index].value, &(src[start_index]), len);
             wchar_t* escapedString = escape(tokens->tokens[token_index].value);
-            free(tokens->tokens[token_index].value);
+            hxFree(tokens->tokens[token_index].value);
             tokens->tokens[token_index].value = escapedString;
             tokens->tokens[token_index].line = line;
 #ifdef HX_DEBUG
@@ -451,7 +451,7 @@ Tokens* lex(wchar_t* src, int* err) noexcept {
                     if (!errCode) MEM_FAIL;
                     wcsncpy(errCode, &(src[start]), len);
                     setError(ERR_VAL, line, errCode);
-                    free(errCode);
+                    hxFree(errCode);
                     errCode = NULL;
                     ERR;
                 }
@@ -531,14 +531,14 @@ void freeTokens(Tokens** tokens) noexcept {
     if ((*tokens)->tokens) {
         for (int i = 0; i < (*tokens)->size; i++) {
             if ((*tokens)->tokens[i].value) {
-                free((*tokens)->tokens[i].value);
+                hxFree((*tokens)->tokens[i].value);
                 (*tokens)->tokens[i].value = NULL;
             }
         }
-        free((*tokens)->tokens);
+        hxFree((*tokens)->tokens);
         (*tokens)->tokens = NULL;
     }
-    free((*tokens));
+    hxFree((*tokens));
     *tokens = NULL;
     return;
 }
