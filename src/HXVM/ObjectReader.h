@@ -11,16 +11,15 @@
 typedef uint8_t Opcode;
 enum {
     OP_NOP = 0,
-    OP_LOAD_CONST,  // 加载常量至栈顶 OP_LOAD_CONST <paramType> <paramValue>
-    // |
-    // OP_LOAD_CONST <constantIndex>
-    OP_LOAD_VAR,                 // 加载变量至栈顶  LOAD_VAR <offest(u32)> <size(u32)(type为压栈后槽位标记的类型))>
-    OP_STORE_ARRAY_ELEMENT,      // 将栈顶值存入数组元素, 索引用栈顶  STORE_ARRAY_ELEMENT <offest(u32)> <size(按u32读>
-    OP_LOAD_ELEMENT_FROM_ARRAY,  // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)> <size(按u32读，
-                                 // type为压栈后槽位标记的类型)>
-    OP_LOAD_VARIABLE_FROM_ADDRESS,   //1,读取并弹出次栈顶中的地址，2、加上偏移量 3、压栈          
-    OP_POP,                      // 弹出
-    OP_STORE_VAR,                // 将栈顶值存入变量  OP_STORE_VAR <offest(u32)>
+    OP_LOAD_CONST,  // 加载常量至栈顶 OP_LOAD_CONST <paramType> <paramValue> 或 OP_LOAD_CONST <constantIndex>
+    OP_LOAD_VAR,              // 加载变量至栈顶  LOAD_VAR <offest(u32)> <size(u32)(type为压栈后槽位标记的类型))>
+    OP_STORE_ARRAY_ELEMENT,         // 将栈顶值存入数组元素, 索引用栈顶  STORE_ARRAY_ELEMENT <offest(u32)> <size(按u32读>
+    OP_LOAD_ELEMENT_FROM_ARRAY,     // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)> <size(按u32读，type为压栈后槽位标记的类型)>
+    OP_LOAD_VARIABLE_FROM_ADDRESS,  // 1,读取并弹出次栈顶中的地址，2、加上偏移量(param[0]) 3、压栈
+    OP_STORE_VARIABLE_FROM_ADDRESS,  // 1,读取并弹出栈顶中的值，2、读取params[0],作为次栈值存的地址的偏移,
+                                     // 3、读params[1]的value(u32),作为size4、传值给(次栈值存的地址+params[0].value)
+    OP_POP,        // 弹出
+    OP_STORE_VAR,  // 将栈顶值存入变量  OP_STORE_VAR <offest(u32)>
     // <copySize(u32, type表示栈顶应转换的类型)>
 
     OP_ADD,
@@ -41,8 +40,7 @@ enum {
     OP_DEC,
 
     OP_JMP,  // OP_JMP <instAddr(u32)>
-    // JMP_CONDITION <栈顶为真时跳转的地址(index u32)> <为假时跳转的地址(index u32)>
-    OP_JMP_CONDITION,
+    OP_JMP_CONDITION, // JMP_CONDITION <栈顶为真时跳转的地址(index u32)> <为假时跳转的地址(index u32)>
     OP_CAL,  // CAL <procIndex>(u32) <paramCount>(u32)
     OP_RET,
     OP_PRINT_STRING,

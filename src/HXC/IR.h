@@ -1871,7 +1871,7 @@ static IR_ClassBody parseClassBody(Tokens* tokens, int start_index, int end_inde
             IR_ClassMember member = {};
             member.type = IR_CM_VARIABLE;
             member.data.variable = var;
-            
+
             if (state == PARSE_PRIVATE_MEMBERS) {
                 body.privateMembers.push_back(member);
             } else if (state == PARSE_PUBLIC_MEMBERS) {

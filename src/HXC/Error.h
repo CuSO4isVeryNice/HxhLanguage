@@ -605,7 +605,7 @@ void setError(ErrorType e, int errorLine, const wchar_t* errCode) noexcept {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
                      L"\33[31m[ERR]类成员访问语法犯规了喵～笨蛋！\33["
                      L"0m(位于第%d行)\n"
-                     L"\33[36m[NOTE]\33[0m 变量所属类型无该成员也会报错喵；类成员访问 ::= id(类)：id(成员)\n",
+                     L"\33[36m[NOTE]\33[0m 变量所属类型无该成员也会报错喵；类成员访问 ::= id(类)：类成员访问\n",
                      errorLine);
             break;
         }

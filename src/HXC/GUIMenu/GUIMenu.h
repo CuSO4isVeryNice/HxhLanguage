@@ -60,7 +60,7 @@ int drawGUIMenu(std::string& srcPath, std::string& outPath) noexcept {
         if (startX < 0) startX = 0;
 
         // 绘制菜单内容
-        wprintf(L"\033[%d;%dH\033[1;37m✨ Hello, HXC User! ✨", startY, startX);
+        wprintf(L"\033[%d;%dH\033[1;37m Hello, HXC User! ~（>v<）", startY, startX);
         wprintf(L"\033[%d;%dH版本：%.3f", startY + 1, startX, HXC_VERSION);
 
         // 使用高亮显示当前选中的菜单项

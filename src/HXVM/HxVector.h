@@ -250,7 +250,7 @@ class HxVector {
 #ifdef HXVECTOR_DEBUG
         fwprintf(this->logStream, HXVECTOR_LOG_DEB_LABEL L"槽位扩容至%u\n", newCapacity);
 #endif
-        uint32_t oldCapacity = this->dataCapacity;
+        //uint32_t oldCapacity = this->dataCapacity;
         this->dataCapacity = newCapacity;
         T* newData = new (std::nothrow) T[this->dataCapacity];
         while (newData == nullptr || newData == NULL) {

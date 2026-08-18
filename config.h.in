@@ -1,8 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#cmakedefine LANG_zh_TW_MACRO
-#cmakedefine HX_DEBUG_MACRO
+#cmakedefine HX_DEBUG_MACRO 1
+#cmakedefine LANG_zh_TW_MACRO 1
+
 #ifdef HX_DEBUG_MACRO
     #define HX_DEBUG
 #endif

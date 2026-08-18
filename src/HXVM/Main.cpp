@@ -1,8 +1,7 @@
 #include <atomic>
 
 #include "config.h"
-// #define HX_DEBUG
-std::atomic<bool> shouldExit{false};  // 要退出吗，用于处理SIGINT
+std::atomic<bool> shouldExit {false}; // 要退出吗，用于处理SIGINT
 #define OP_STACK_SIZE 512             // 操作数栈大小
 #define HXVM_VERSION 0.114f
 #define ERR_LABEL L"\33[1;31m[E]\33[0m"
@@ -15,7 +14,7 @@ inline void initLocale(void);
 #include <stdint.h>
 #include <stdio.h>
 #include <time.h>
-
+#include <dlfcn.h>  //共享库相关
 #include <chrono>
 #include <csignal>
 

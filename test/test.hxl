@@ -1,13 +1,19 @@
 cls: Test {
     var:var1:int;
     var:var2:int;
+    var:var3:SubTest;
     fun:fun1():void -> {
         __hx_write_string__ "Test:fun1\n";
     }
 }
-
+cls: SubTest {
+    var:subTestVar:float;
+}
 函数：主函数（无参数）->{
     var:newVar:Test;
     newVar:fun1();
+    newVar:var2 = 114;
+    newVar:var1 = newVar:var2;
+    newVar:var3:subTestVar = 514.0;
     ret：0。  
 }

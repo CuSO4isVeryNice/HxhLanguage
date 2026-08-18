@@ -1,15 +1,21 @@
+/********************************/
+/**一千万以内最好的编程语言
+***哇哇哇这个这个哇
+*********************************/
+
 #include "config.h"
 
 #define HXC_VERSION 0.114f
-#include "GUIMenu/GUIMenu.h"
-// #define HX_DEBUG
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
 #include <wchar.h>
+#include <dlfcn.h>  //共享库相关
 #include <cstdlib>
 #include <list>
 #include <string>
+
+#include "GUIMenu/GUIMenu.h"
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -20,7 +26,7 @@ FILE* outputStream = NULL;
 FILE* logStream = NULL;
 FILE* errorStream = NULL;
 inline void hxFree(void* ptr) {
-    if(ptr == nullptr) return;
+    if (ptr == nullptr) return;
     free(ptr);
     ptr = nullptr;
 }
@@ -155,3 +161,4 @@ int main(int argc, char* argv[]) {
         fwprintf(errorStream, L"\33[31m[ERR]\33[0m异常信息：%hs\n", e.what());
     }
 }
+//(≧▽≦) 

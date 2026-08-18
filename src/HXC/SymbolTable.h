@@ -52,12 +52,16 @@ typedef struct IR_Function {
     Procedure* proc;
 } IR_Function;
 //-------------------------------------------------------------
+typedef struct {
+    int index = 0;
+    int procIndex = 0;
+} InstIndex;
 typedef struct IR_Variable {
     wchar_t* name;
     IR_DataType type;
     bool isTypeKnown;
     bool isOnlyRead;
-    int address;  // 变量在符号号表中的地址
+    std::vector<InstIndex> insts;  // 仅封装至IR_ClassMemberData时使用
 } IR_Variable;
 //-------------------------------------------------------------
 typedef union IR_ClassMemberData {
@@ -69,21 +73,27 @@ typedef struct IR_ClassMember {
     IR_ClassMemberType type;
     IR_ClassMemberData data;
     int funMemInGlobalIndex;  // 函数成员在全局表中的索引
+    int varMemOffest = 0;
+    int varMemSize = 0;
 } IR_ClassMember;
 typedef struct IR_ClassBody {
     std::vector<IR_ClassMember> publicMembers;
     std::vector<IR_ClassMember> privateMembers;
     std::vector<IR_ClassMember> protectedMembers;
 } IR_ClassBody;
+typedef struct SymbolIndex {
+    int procIndex;
+    int symbolTableIndex;
+    int symbolIndex;
+} SymbolIndex;
 typedef struct IR_Class {
     int line;  // 类定义所在行号
     wchar_t* name;
     wchar_t* parent_name;  // 父类名
     int fatherIndex = -1;  // 父类在类表中的索引，-1表示无父类
-
     IR_ClassBody body;
-
-    int size;  // 类的大小，单位：字节
+    int size = 0;  // 类的大小，单位：字节
+    std::vector<SymbolIndex> indexList;    //定位实例所在位置
 } IR_Class;
 //---------------------------------------------------------------
 typedef struct IR_Program {
@@ -95,13 +105,13 @@ typedef struct IR_Program {
 
 // 变量处理：存储各变量与其对应的指令，用于回填、标记是否有用
 class Symbol {
-   public:
+public:
     bool isUsed;
     wchar_t* name;
     bool isTypeKnown;
     IR_DataType type;
     int size;
-    int offest;  // 在栈中的偏移量增加的量
+    int offest;  // 在栈中的偏移量
     std::vector<int> instIndex;
     int procIndex;
 
@@ -144,7 +154,7 @@ class Symbol {
 };
 
 typedef class SymbolTable {
-   public:
+public:
     std::vector<IR_Function*> fun;  // 函数表（数组）
     std::vector<Symbol> vars;
 
@@ -163,13 +173,13 @@ typedef class SymbolTable {
     SymbolTable() : var_size(0) {}
 } SymbolTable;
 class FunCallPitch {  // 回填CALL指令,被指向
-   public:
+public:
     FunCallPitch(IR_Function* ir_fun) noexcept : fun(ir_fun), index(-1) {}
     IR_Function* fun;
     int index;
 };
 class FunCallPitchTable {
-   public:
+public:
     std::vector<FunCallPitch*> pitches;
     FunCallPitch* enter(IR_Function* fun) {
         for (int i = 0; i < pitches.size(); i++) {
@@ -246,9 +256,16 @@ typedef struct ASTNode {
 } ASTNode;
 
 class PackedClassFunMem {
-   public:
+public:
     PackedClassFunMem() : irFun(nullptr), cls(nullptr) {}
     enum { FUN_PUBLIC, FUN_PRIVATE, FUN_PROTECTED } accessPermission;
     IR_Function* irFun;
+    IR_Class* cls;  // 不一定指向用户语句中的类，但该类一定包含该函数且是用户语句中的类的父类
+};
+class PackedClassVarMem {
+public:
+    PackedClassVarMem() : irVar(nullptr), cls(nullptr) {}
+    enum { VAR_PUBLIC, VAR_PRIVATE, VAR_PROTECTED } accessPermission;
+    IR_Variable* irVar;
     IR_Class* cls;  // 不一定指向用户语句中的类，但该类一定包含该函数且是用户语句中的类的父类
 };
