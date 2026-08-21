@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 
+#include "Warning.h"
 #include "Error.h"
 #include "Lexer.h"
 #include "SymbolTable.h"
@@ -19,7 +20,7 @@ void showFunctionInfo(IR_Function* function);
  * @param index 当前解析到的Token索引，解析完成后会更新为下一个未解析的Token索引
  * @param err 错误码指针，发生错误时会设置为相应错误码
  */
-IR_Function* parseFunction(Tokens* tokens, int* index, int* err);
+IR_Function* parseFunction(Tokens* tokens, int* index, int* err, bool isFocedNativeLibFun = false);
 /**
  * 解析类定义
  * @param tokens 词法分析得到的Token流
@@ -64,6 +65,49 @@ IR_Program* generateIR(Tokens* tokens, int* err) {
                                 */
         // 解析全局变量、函数或类定义
         if (tokens->tokens[index].type == TOK_KW) {
+            if (wcscmp(tokens->tokens[index].value, L"lib") == 0) {  //lib|原生库 ： <函数声明>
+                // 解析到一个库函数定义
+                index++;
+                if(tokens->tokens[index].type != TOK_OPR_COLON) {
+                    setError(ERR_FUN, tokens->tokens[index].line, NULL);
+                    *err = 255;
+                    freeIRProgram(&program);
+                    return NULL;
+                }
+                index++;
+                IR_Function* func = parseFunction(tokens, &index, err);
+                if (!func) {
+                    // 解析函数出错
+                    hxFree(program);
+                    return NULL;
+                }
+                func->isNativeLibFun = true;
+                func->kind = IR_Function::GLOBAL_FUN;
+                int index = isFunctionRepeatDefine(func, program->functions);
+                if (index == -255) {
+                    // 函数重复定义错误已处理
+                    freeIRProgram(&program);
+                    *err = 255;
+                    return NULL;
+                } else if (index == -1) {
+                    // 函数未声明，继续添加
+                    program->functions.push_back(func);
+                } else {
+                    // 函数已声明，进行定义
+                    if (program->functions[index]->name) hxFree(program->functions[index]->name);
+                    if (program->functions[index]->params) {
+                        for (int i = 0; i < program->functions[index]->paramCount; i++) {
+                            if (program->functions[index]->params[i].name) hxFree(program->functions[index]->params[i].name);
+                        }
+                        hxFree(program->functions[index]->params);
+                    }
+                    if (program->functions[index]->returnType.customTypeName)
+                        hxFree(program->functions[index]->returnType.customTypeName);
+                    hxFree(program->functions[index]);
+                    program->functions[index] = func;
+                    continue;
+                }
+            }
             if (wcscmp(tokens->tokens[index].value, L"函数") == 0 || wcscmp(tokens->tokens[index].value, L"fun") == 0) {
 #ifdef HX_DEBUG
                 log(L"解析到一个函数定义");
@@ -897,7 +941,7 @@ static IR_FunctionParam* parseFunctionParams(Tokens* tokens, int* index, int* pa
     return params;
 }
 // 函数定义::= 函数:标识符(参数列表)[,返回类型:数据类型] -> {函数体}
-static IR_Function* parseFunction_CN(Tokens* tokens, int* index, int* err) {
+static IR_Function* parseFunction_CN(Tokens* tokens, int* index, int* err, bool isFocedNativeLibFun = false) {
     if ((*index + 1) >= tokens->count) {
         *err = 255;  // 语法错误
         setError(ERR_FUN, tokens->tokens[*index].line, NULL);
@@ -1205,13 +1249,25 @@ static IR_Function* parseFunction_CN(Tokens* tokens, int* index, int* err) {
         function->bodyTokens[i] = tokens->tokens[body_start_index + i];
     }
     (*index)++;
+    if(isFocedNativeLibFun) {
+        setWarning(WARN_NATIVE_LIB_FUN_HAS_BODY, tokens->tokens[*index].line, function->name);
+        for(int i = 0; i < function->body_token_count; i++) {
+            if(function->bodyTokens[i].value) {
+                free(function->bodyTokens[i].value);
+                function->bodyTokens[i].value = NULL;
+            }
+        }
+        function->body_token_count = 0;
+        free(function->bodyTokens);
+        function->bodyTokens = NULL;
+    }
 #ifdef HX_DEBUG
     showFunctionInfo(function);
 #endif
     return function;
 }
 // 函数定义::= function:标识符(参数列表)[:数据类型]->{函数体}
-static IR_Function* parseFunction_EN(Tokens* tokens, int* index, int* err) {
+static IR_Function* parseFunction_EN(Tokens* tokens, int* index, int* err, bool isFocedNativeLibFun = false) {
     if (!tokens || !index) {
         if (err) *err = -1;
         return NULL;
@@ -1455,6 +1511,18 @@ static IR_Function* parseFunction_EN(Tokens* tokens, int* index, int* err) {
         function->bodyTokens[i] = tokens->tokens[body_start_index + i];
     }
     (*index)++;
+    if(isFocedNativeLibFun) {
+        setWarning(WARN_NATIVE_LIB_FUN_HAS_BODY, tokens->tokens[*index].line, function->name);
+        for(int i = 0; i < function->body_token_count; i++) {
+            if(function->bodyTokens[i].value) {
+                free(function->bodyTokens[i].value);
+                function->bodyTokens[i].value = NULL;
+            }
+        }
+        function->body_token_count = 0;
+        free(function->bodyTokens);
+        function->bodyTokens = NULL;
+    }
 #ifdef HX_DEBUG
     showFunctionInfo(function);
 #endif
@@ -1464,7 +1532,7 @@ static IR_Function* parseFunction_EN(Tokens* tokens, int* index, int* err) {
 // 定义函数::= fun:标识符(参数列表)->数据类型 { 函数体 }
 // 定义函数::= 定义函数:标识符(参数列表)
 // [，它的返回类型是：数据类型]|[，它没有返回类型] { 函数体 }
-IR_Function* parseFunction(Tokens* tokens, int* index, int* err) {
+IR_Function* parseFunction(Tokens* tokens, int* index, int* err, bool isFocedNativeLibFun) {
     if (!tokens || !index) {
         if (err) *err = -1;
         return NULL;
@@ -1495,6 +1563,7 @@ void showFunctionInfo(IR_Function* function) {
     if (!function) return;
     initLocale();
     fwprintf(logStream, L"函数名: %ls\n", function->name);
+    fwprintf(logStream, L"是否为原生库函数: %ls\n", function->isNativeLibFun ? L"是" : L"否");
     fwprintf(logStream, L"是否已知返回类型: %ls\n", function->isReturnTypeKnown ? L"是" : L"否");
     if (function->isReturnTypeKnown) {
         fwprintf(logStream, L"返回类型: ");

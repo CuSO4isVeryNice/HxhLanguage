@@ -564,14 +564,24 @@ AFTER_COLON:
             }
             // 赋值
             else if (next->type == TOK_OPR_SET) {
+                #ifdef HX_DEBUG
+                log(L"L568+ 处理赋值");
+                #endif
                 if (isMemberAccessRight) {
                     (*index)++;
                     return node;
                 }
                 // 合法的左值：NODE_VAR 或 NODE_BINARY 且 op 为 BIN_OPR_CLASS_MEMBER_ACCESS（或数组访问）
-                bool isValidLeft = (node->left->kind == NODE_VAR) ||
-                                   (node->left->kind == NODE_BINARY && node->left->data.binary.op == BIN_OPR_CLASS_MEMBER_ACCESS);
+                bool isValidLeft = false;
+                if (node->kind == NODE_VAR) {
+                    isValidLeft = true;
+                } else if (node->left && node->kind == NODE_BINARY && node->data.binary.op == BIN_OPR_CLASS_MEMBER_ACCESS) {
+                    isValidLeft = true;
+                }
                 if (!isValidLeft) {
+                    #ifdef HX_DEBUG
+                    log(L"L580+赋值 -> 非法的左值");
+                    #endif
                     *err = 255;
                     setError(ERR_EXP, node->token->line, NULL);
                     return NULL;
@@ -579,6 +589,9 @@ AFTER_COLON:
 
                 if (!isFromClass && symIdx == -1) {
                     setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
+                    #ifdef HX_DEBUG
+                    log(L"L580+赋值 -> 找不到符号");
+                    #endif
                     *err = 255;
                     freeAST(node);
                     return NULL;

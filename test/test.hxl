@@ -15,5 +15,13 @@ cls: SubTest {
     newVar:var2 = 114;
     newVar:var1 = newVar:var2;
     newVar:var3:subTestVar = 514.0;
+
+    var: newArr: int[64];
+    newArr[4] = 114;
+    for: tmp:newArr -> {
+
+    }
+    var: tmp: int;
+    tmp = 114;
     ret：0。  
 }

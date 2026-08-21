@@ -50,6 +50,8 @@ typedef struct IR_Function {
 
     FunCallPitch* pitch;
     Procedure* proc;
+
+    bool isNativeLibFun;
 } IR_Function;
 //-------------------------------------------------------------
 typedef struct {

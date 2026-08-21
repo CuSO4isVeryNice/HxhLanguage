@@ -57,8 +57,8 @@ typedef struct Tokens {  // Token流
     Token* tokens;
 } Tokens;
 const wchar_t* const keyword[] = {  // 关键字
-    L"ret",      L"var",      L"con",        L"fun",      L"cls",     L"if",         L"int",        L"float", L"str",
-    L"char",     L"整型",     L"浮点型",     L"字符串型", L"字符型",  L"定义变量",   L"定义常量",   L"函数",  L"定义类",
+    L"ret",      L"var",      L"con",        L"fun",      L"cls",     L"if",         L"int",        L"float", L"str", L"lib",
+    L"char",     L"原生库",L"整型",     L"浮点型",     L"字符串型", L"字符型",  L"定义变量",   L"定义常量",   L"函数",  L"定义类",
     L"公有成员", L"私有成员", L"受保护成员", L"public",   L"private", L"proctected", L"类型",       L"父类",  L"repeat",
     L"until",    L"循环",     L"直到",       L"若",       L"返回",    L"返回类型",   L"无返回类型", L"for",   L"遍历",
     L"else",     L"否则",     L"遍历",       L"中间变量", NULL};
