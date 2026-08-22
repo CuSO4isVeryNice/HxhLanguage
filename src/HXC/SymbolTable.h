@@ -45,7 +45,7 @@ typedef struct IR_Function {
     bool isReturnTypeKnown;
     IR_DataType returnType;
     Token* bodyTokens;  // 函数体的Token流
-    int body_token_count;
+    int bodyTokenCount;
     bool isUsed;  // 标记该函数是否被使用过
 
     FunCallPitch* pitch;
@@ -91,7 +91,7 @@ typedef struct SymbolIndex {
 typedef struct IR_Class {
     int line;  // 类定义所在行号
     wchar_t* name;
-    wchar_t* parent_name;  // 父类名
+    wchar_t* parentClassName;  // 父类名
     int fatherIndex = -1;  // 父类在类表中的索引，-1表示无父类
     IR_ClassBody body;
     int size = 0;  // 类的大小，单位：字节
@@ -99,10 +99,11 @@ typedef struct IR_Class {
 } IR_Class;
 //---------------------------------------------------------------
 typedef struct IR_Program {
-    IR_Variable** global_variables;
-    int global_variable_count;
+    IR_Variable** globalVars;
+    int globalVarCount;
     std::vector<IR_Function*> functions;
     std::vector<IR_Class*> classes;
+    std::vector<char*> libPathList;
 } IR_Program;
 
 // 变量处理：存储各变量与其对应的指令，用于回填、标记是否有用
@@ -197,7 +198,7 @@ public:
     }
 #ifdef HX_DEBUG
     void list() {
-        fwprintf(logStream, L"回填函数列表：\n");
+        fwprintf(logStream, L"回填函数列表(index为恶臭负数为无用函数[首]))：\n");
         for (int i = 0; i < pitches.size(); i++) {
             fwprintf(logStream, L"\t%03u\33[1;32m%ls\33[0m index:%d\n", i, pitches.at(i)->fun->name, pitches.at(i)->index);
         }

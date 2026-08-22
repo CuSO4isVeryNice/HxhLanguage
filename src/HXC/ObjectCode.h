@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <wchar.h>
-
 #include <cstdio>
 #include <string>
 
@@ -57,7 +56,7 @@ enum {
     OP_STRING_CONCAT,
 
     OP_HEAP_ALLOC,  // OP_HEAP_ALLOC size(u32)：分配内存的地址放栈顶
-
+    OP_CAL_NATIVE,  // OP_CAL_NATIVE funName(常量池索引，u32) argCount(u32)
 };
 //clang-format on
 typedef uint8_t ParamType;
@@ -99,17 +98,20 @@ typedef struct Procedure {
 // 常量池
 enum ConstantType {
     CONST_STRING,
+    CONST_ASCII_STRING,
 };
 typedef struct Constant {
     ConstantType type;  // char, 1字节
     uint32_t size;      // 真实大小，不是字符串长度
     union {
-        wchar_t* string_value;
+        wchar_t* stringValue;
+        char* asciiString;
     } value;
 } Constant;
 typedef struct ConstantPool {
     uint32_t size = 0;
     Constant* constants = NULL;
+    std::vector<char*> libNameList; //所需动态库
 } ConstantPool;
 //----------------------------------
 typedef struct ObjectCodeHeader {
@@ -119,6 +121,7 @@ typedef struct ObjectCodeHeader {
 //--------------------------------------
 typedef struct ObjectCode {
     ObjectCodeHeader header;
+    
     ConstantPool constantPool;
     uint32_t procedureSize = 0;
     std::vector<Procedure*> procedures;
@@ -164,6 +167,22 @@ static int writeWstring(const wchar_t* wstr, FILE* file) noexcept {
 
     for (uint32_t i = 0; i < len; i++) {
         uint16_t cp = (uint16_t)wstr[i];
+        if (fwrite(&cp, sizeof(cp), 1, file) != 1) return -1;
+    }
+    return 0;
+}
+static int writeString(const char* str, FILE* file) noexcept {
+    if (!str) {
+        uint32_t byteLen = 0;
+        return fwrite(&byteLen, sizeof(byteLen), 1, file) == 1 ? 0 : -1;
+    }
+
+    uint32_t len = strlen(str);
+    uint32_t byteLen = len * sizeof(char);  // 不含 \0
+    if (fwrite(&byteLen, sizeof(byteLen), 1, file) != 1) return -1;
+
+    for (uint32_t i = 0; i < len; i++) {
+        char cp = str[i];
         if (fwrite(&cp, sizeof(cp), 1, file) != 1) return -1;
     }
     return 0;
@@ -302,6 +321,9 @@ static int writeInstruction(Instruction& inst, FILE* file) {
         case OP_STORE_VARIABLE_FROM_ADDRESS:
             fwprintf(logStream, L"\33[1;34m OP_STORE_VARIABLE_FROM_ADDRESS\33[0m\n");
             break;
+        case OP_CAL_NATIVE:
+            fwprintf(logStream, L"\33[1;34m OP_CAL_NATIVE\33[0m\n");
+            break;    
         default:
             fwprintf(logStream, L"\33[1;32mOP_NOP\33[0m)\n");
     }
@@ -353,8 +375,19 @@ int writeObjectCode(FILE* objFile, ObjectCode& obj) noexcept {
         char type = (char)(obj.constantPool.constants[i].type);
         if (fwrite(&(type), sizeof(char), 1, objFile) != 1) return -1;
         if (obj.constantPool.constants[i].type == CONST_STRING) {
-            if (writeWstring(obj.constantPool.constants[i].value.string_value, objFile)) return -1;
+            if (writeWstring(obj.constantPool.constants[i].value.stringValue, objFile)) return -1;
+        } else if (obj.constantPool.constants[i].type == CONST_ASCII_STRING) {
+            if (writeString(obj.constantPool.constants[i].value.asciiString, objFile)) return -1;
         }
+    }
+    //写obj.constantPool.libNameList
+    uint32_t libNameListSize = (uint32_t)obj.constantPool.libNameList.size();
+    if (fwrite(&(libNameListSize), sizeof(uint32_t), 1, objFile) != 1) return -1;
+    for(int i = 0; i < obj.constantPool.libNameList.size(); i++) {
+#ifdef HX_DEBUG
+        log(L"写入库路径:%s", obj.constantPool.libNameList.at(i)? obj.constantPool.libNameList.at(i): "(null)");
+#endif
+        if (writeString(obj.constantPool.libNameList.at(i), objFile)) return -1;
     }
     // ProcedureSize
     if (fwrite(&(obj.procedureSize), sizeof(uint32_t), 1, objFile) != 1) return -1;

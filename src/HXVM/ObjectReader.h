@@ -17,7 +17,7 @@ enum {
     OP_LOAD_ELEMENT_FROM_ARRAY,     // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)> <size(按u32读，type为压栈后槽位标记的类型)>
     OP_LOAD_VARIABLE_FROM_ADDRESS,  // 1,读取并弹出次栈顶中的地址，2、加上偏移量(param[0]) 3、压栈
     OP_STORE_VARIABLE_FROM_ADDRESS,  // 1,读取并弹出栈顶中的值，2、读取params[0],作为次栈值存的地址的偏移,
-                                     // 3、读params[1]的value(u32),作为size4、传值给(次栈值存的地址+params[0].value)
+    // 3、读params[1]的value(u32),作为size4、传值给(次栈值存的地址+params[0].value)
     OP_POP,        // 弹出
     OP_STORE_VAR,  // 将栈顶值存入变量  OP_STORE_VAR <offest(u32)>
     // <copySize(u32, type表示栈顶应转换的类型)>
@@ -56,7 +56,7 @@ enum {
     OP_STRING_CONCAT,
 
     OP_HEAP_ALLOC,  // OP_HEAP_ALLOC size(u32)：分配内存的地址放栈顶
-
+    OP_CAL_NATIVE,  // OP_CAL_NATIVE funName(常量池索引，u32) argCount(u32)
 };
 typedef uint8_t ParamType;
 enum {
@@ -92,17 +92,20 @@ typedef struct Procedure {
 // 常量池
 enum ConstantType {
     CONST_STRING,
+    CONST_ASCII_STRING,
 };
 typedef struct Constant {
     ConstantType type;  // char, 1字节
     uint32_t size;      // 真实大小，不是字符串长度
     union {
-        wchar_t* string_value;
+        wchar_t* stringValue;
+        char* asciiString;
     } value;
 } Constant;
 typedef struct ConstantPool {
     uint32_t size;
     Constant* constants;
+    HxVector<char*> libNameList; //所需动态库
 } ConstantPool;
 //----------------------------------
 typedef struct ObjectCodeHeader {
@@ -148,6 +151,26 @@ inline static wchar_t* readWstring(FILE* file) {
 
     free(buf);
     return wstr;
+}
+inline static char* readString(FILE* file) {
+    uint32_t byteLen;
+    if (fread(&byteLen, sizeof(byteLen), 1, file) != 1) {
+        fwprintf(errorStream, ERR_LABEL L"读字符串时发生错误！\n");
+        return nullptr;
+    }
+    if (byteLen == 0) return nullptr;
+
+    uint32_t charCount = byteLen / sizeof(char);
+
+    char* buf = (char*)calloc(charCount, sizeof(char));
+    if (!buf) return nullptr;
+
+    if (fread(buf, sizeof(char), charCount, file) != charCount) {
+        free(buf);
+        return nullptr;
+    }
+
+    return buf;
 }
 // 读取指令
 inline static int readInstruction(Instruction& instr, FILE* file) {
@@ -208,14 +231,32 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
         obj.constantPool.constants[i].type = (ConstantType)typeChar;
         if (obj.constantPool.constants[i].type == CONST_STRING) {
             // 将 u16 序列读入并转为 wchar_t*
-            obj.constantPool.constants[i].value.string_value = readWstring(file);
+            obj.constantPool.constants[i].value.stringValue = readWstring(file);
             // 重新记录当前平台的真实字节大小
-            if (obj.constantPool.constants[i].value.string_value) {
+            if (obj.constantPool.constants[i].value.stringValue) {
                 obj.constantPool.constants[i].size =
-                    (uint32_t)(wcslen(obj.constantPool.constants[i].value.string_value) * sizeof(wchar_t));
+                    (uint32_t)(wcslen(obj.constantPool.constants[i].value.stringValue) * sizeof(wchar_t));
             }
+        } else if (obj.constantPool.constants[i].type == CONST_ASCII_STRING) {
+            obj.constantPool.constants[i].value.asciiString = readString(file);
         }
     }
+    //读动态库路径
+    uint32_t libNameListSize = 0;
+    if (fread(&libNameListSize, sizeof(uint32_t), 1, file) != 1) {
+        fclose(file);
+        return -1;
+    }
+#ifdef HX_DEBUG
+    wprintf(LOG_LABEL L"libNameListSize: %u\n", libNameListSize);
+#endif
+    for(int i = 0; i < libNameListSize; i++) {
+        char* libName = readString(file);
+        if(libName) obj.constantPool.libNameList.push_back(libName);
+    }
+#ifdef HX_DEBUG
+    wprintf(LOG_LABEL L"libNameList.size(): %u\n", obj.constantPool.libNameList.size());
+#endif
     // 读取过程
     uint32_t procCount;
     if (fread(&procCount, sizeof(uint32_t), 1, file) != 1) {
@@ -257,8 +298,14 @@ inline void freeObjectCode(ObjectCode& obj) {
     if (obj.constantPool.constants != nullptr) {
         for (uint32_t i = 0; i < obj.constantPool.size; i++) {
             if (obj.constantPool.constants[i].type == CONST_STRING) {
-                if (obj.constantPool.constants[i].value.string_value != nullptr) {
-                    free(obj.constantPool.constants[i].value.string_value);
+                if (obj.constantPool.constants[i].value.stringValue != nullptr) {
+                    free(obj.constantPool.constants[i].value.stringValue);
+                    obj.constantPool.constants[i].value.stringValue = nullptr;
+                }
+            } else if (obj.constantPool.constants[i].type == CONST_ASCII_STRING) {
+                if (obj.constantPool.constants[i].value.asciiString != nullptr) {
+                    free(obj.constantPool.constants[i].value.asciiString);
+                    obj.constantPool.constants[i].value.asciiString = nullptr;
                 }
             }
         }

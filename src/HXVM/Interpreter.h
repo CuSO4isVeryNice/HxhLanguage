@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
-
+#include <dlfcn.h>
 #include <atomic>
 extern std::atomic<bool> shouldExit;
 #include <cstdlib>
@@ -150,6 +150,9 @@ typedef struct Symbol {
     OpStackType type;
     void* address;
 } Symbol;
+
+#include "../HxSharedLib/Template.h"
+
 // 真假判定
 inline static bool isOperandTrue(const _OpStack& op) noexcept {
     switch (op.type) {
@@ -338,7 +341,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                 fwprintf(errorStream, ERR_LABEL L"非法指令格式\n");
                 return -1;
             }
-            wchar_t* wstr = obj.constantPool.constants[*index].value.string_value;
+            wchar_t* wstr = obj.constantPool.constants[*index].value.stringValue;
             memcpy(opStack.opStack[opStack.top].value, wstr, sizeof(wchar_t*));
         } else {
             if (inst.params[0].type == PARAM_TYPE_INDEX) {
@@ -954,7 +957,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
 #ifdef HX_DEBUG
         wprintf(LOG_LABEL L"\33[32m进入\33[0minterpretInstruction()->OP_PRINT_STRING分支\n");
 #endif
-        wprintf(L"%ls", obj.constantPool.constants[*((uint32_t*)inst.params[0].value)].value.string_value);
+        wprintf(L"%ls", obj.constantPool.constants[*((uint32_t*)inst.params[0].value)].value.stringValue);
 #ifdef HX_DEBUG
         wprintf(LOG_LABEL L"\33[32m退出：\33[0minterpretInstruction()->OP_PRINT_STRING分支\n");
 #endif
@@ -1406,7 +1409,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
         break;
     }
     case OP_STORE_VARIABLE_FROM_ADDRESS: {
-        #ifdef HX_DEBUG
+#ifdef HX_DEBUG
         wprintf(LOG_LABEL L"将栈顶值写入次栈项的地址\n");
 #endif
         if (opStack.top <= 2) {
@@ -1417,13 +1420,13 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
         _OpStack& topOp = opStack.opStack[opStack.top];
         opStack.top--;
         _OpStack& secTopOp = opStack.opStack[opStack.top];
-        
+
         uint32_t offest = 0U;
         uint32_t size = 0U;
-        
+
         memcpy(&offest, inst.params[0].value, sizeof(uint32_t));
         memcpy(&size, inst.params[1].value, sizeof(uint32_t));
-        
+
         void* addr = nullptr;
         memcpy(&addr, secTopOp.value, sizeof(void*));
         if(addr == nullptr) {
@@ -1431,15 +1434,101 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
             return -1;
         }
         addr = (char*)addr + offest;
-        
+
         memcpy(addr, topOp.value, size);
+        break;
+    }
+    case OP_CAL_NATIVE: {
+        uint32_t libFunNameIndex = 0;
+        memcpy(&libFunNameIndex, inst.params[0].value, sizeof(uint32_t));
+        char* libFunName = obj.constantPool.constants[libFunNameIndex].value.asciiString;
+        if (!libFunName) {
+            fwprintf(errorStream, ERR_LABEL L"函数名是废物喵");
+            return -1;
+        }
+#ifdef HX_DEBUG
+        wprintf(LOG_LABEL L"libFunName: %s\n", libFunName);
+#endif
+        void* handle = nullptr;
+        LibFun::SharedLibFun nativeFun = nullptr;
+#ifdef HX_DEBUG
+        wprintf(LOG_LABEL L"libNameListSize: %d\n", obj.constantPool.libNameList.size());
+#endif
+        for(int i = 0; i < obj.constantPool.libNameList.size(); i++) {
+#ifdef HX_DEBUG
+            wprintf(LOG_LABEL L"i: %d\n", i);
+#endif
+            if (obj.constantPool.libNameList[i] == nullptr) continue;
+            std::filesystem::path objFileAbsoltePath = std::filesystem::absolute(objFilePath);
+            std::string libPath;
+#ifdef WIN32
+            libPath = objFileAbsoltePath.parent_path().string() + "\\" + obj.constantPool.libNameList[i];
+#else
+            libPath = objFileAbsoltePath.parent_path().string() + "/" + obj.constantPool.libNameList[i];
+#endif
+
+            #ifdef HX_DEBUG
+            wprintf(LOG_LABEL L"绝对路径：%s\n", libPath.c_str());
+#endif
+            handle = dlopen(libPath.c_str(), RTLD_LAZY);
+            if (!handle) {
+                fwprintf(errorStream, ERR_LABEL L"zako~你共享库文件放哪里了喵？\n");
+            }
+            nativeFun = loadSharedLibFunction(handle, libFunName);
+            if (!nativeFun)
+                continue;
+        }
+        if(!nativeFun) {
+            fwprintf(errorStream, ERR_LABEL L"共享库被玩坏了喵\n  dlerror(): %s\n",  dlerror()? dlerror(): "(null)");
+            return -1;
+        }
+        LibFun::SharedLibFunArg args;
+        uint32_t argCount = 0;
+        memcpy(&argCount, inst.params[1].value, sizeof(int32_t));
+        if (opStack.top < argCount) {
+            fwprintf(errorStream, ERR_LABEL L"参数不够喵~\n");
+            return -1;
+        }
+        uint32_t currentParamIndex = 0;
+        for (int i = opStack.top - argCount; i < opStack.top; i++) {
+            LibFun::ArgSym argSym = {};
+            argSym.opStackParam = opStack.opStack[i];
+            switch(opStack.opStack[i].type) {
+            case PARAM_TYPE_ADDRESS:
+                argSym.memPtr = (void*)(opStack.opStack[i].value);
+                argSym.value.addressValue = (void*)(opStack.opStack[i].value);
+                argSym.type = LibFun::ArgSym::TYPE_ADDR;
+                break;
+            case PARAM_TYPE_BOOL:
+                //argSym.memPtr = (void*)(opStack.opStack[i].value);
+                argSym.value.boolValue = *((char*)(opStack.opStack[i].value));
+                argSym.type = LibFun::ArgSym::TYPE_BOOL;
+                break;
+            case PARAM_TYPE_CHAR:
+                argSym.value.unicodeValue = *((wchar_t*)(opStack.opStack[i].value));
+                argSym.type = LibFun::ArgSym::TYPE_UNI_CHAR;
+                break;
+            case PARAM_TYPE_FLOAT:
+                argSym.value.doubleValue = *((double*)(opStack.opStack[i].value));
+                argSym.type = LibFun::ArgSym::TYPE_DOUBLE;
+                break;
+            }
+            args.args.push_back(argSym);
+            currentParamIndex++;
+        }
+        opStack.top -= argCount;  // 弹出参数
+
+        _OpStack newOpVal = nativeFun(args);
+        opStack.opStack[opStack.top] = newOpVal;
+        opStack.top++;
+        dlclose(handle);
         break;
     }
     case OP_NOP: {
         break;
     }
     default: {
-        wprintf(ERR_LABEL L"未知指令！\n");
+        wprintf(ERR_LABEL L"[疑惑]这是什么指令喵？开始变得奇怪了.....\n");
         return -1;
     }
     }

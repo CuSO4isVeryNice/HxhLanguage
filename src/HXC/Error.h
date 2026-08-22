@@ -23,7 +23,7 @@ typedef enum ErrorType {
     ERR_TYPE,
     ERR_MAIN,
     ERR_COUNLD_NOT_FIND_PARENT,
-    ERR_UNKOWN_TYPE,
+    //ERR_UNKOWN_TYPE,
     ERR_NO_MAIN,
     ERR_CANNOT_FIND_SYMBOL,
     ERR_EXP,
@@ -40,6 +40,7 @@ typedef enum ErrorType {
     ERR_NO_VAR,
     ERR_CLASS_MEMBER_ACCESS,  // 类成员访问
     ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED,
+    ERR_SYNX_LIB_REF,       //引用动态库语法错误
 } ErrorType;
 void initLocale(void) noexcept {
     // 设置Locale
@@ -474,14 +475,7 @@ void setError(ErrorType e, int errorLine, const wchar_t* errCode) noexcept {
             break;
         }
 
-        case ERR_UNKOWN_TYPE: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]类型？不知道哦\33[0m(位于第%d行)"
-                     L"\n\33[36m[NOTE]\33[0m "
-                     L"似乎没有这个类型喵->%ls\n",
-                     errorLine, errCode);
-            break;
-        }
+        
 
         case ERR_NO_MAIN: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]没有主函数喵\33[0m\n");
@@ -613,6 +607,10 @@ void setError(ErrorType e, int errorLine, const wchar_t* errCode) noexcept {
         case ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]这个表达式不支持类成员访问喵～\33[0m在第%d行\n",
                      errorLine);
+            break;
+        }
+        case ERR_SYNX_LIB_REF: {
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR] 引用动态库的语法犯规了喵\33[0m在第%d行\n\33[36m[NOTE]\33[0m 引用动态库::= lib:string|原生库：string", errorLine);
             break;
         }
     }

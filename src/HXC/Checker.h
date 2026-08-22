@@ -39,7 +39,7 @@ int isFunctionRepeatDefine(IR_Function* fun, std::vector<IR_Function*>& table) {
                 }
                 if (allParamsMatch) {
                     // 检查是不是声明
-                    if (table[i]->bodyTokens == NULL || table[i]->body_token_count == 0) {
+                    if (table[i]->bodyTokens == NULL || table[i]->bodyTokenCount == 0) {
                         return i;
                     }
                     // 函数重复定义
@@ -77,7 +77,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
     for (int i = 0; i < program->functions.size(); i++) {
         IR_Function* fun = program->functions[i];
         // 已经知道类型
-        if (fun->isReturnTypeKnown || fun->body_token_count == 0) continue;
+        if (fun->isReturnTypeKnown || fun->bodyTokenCount == 0) continue;
         // 简单记录变量
         SymbolTable tempLocalScope;
         tempLocalScope.fun = program->functions;
@@ -100,7 +100,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
         int err = 0;
         unsigned int blockNum = 0U;
         // 遍历一遍，查找ret和简单记录变量
-        for (int index = 1; index < fun->body_token_count - 1; index++) {
+        for (int index = 1; index < fun->bodyTokenCount - 1; index++) {
             Token& currentToken = fun->bodyTokens[index];
 
             if (currentToken.type == TOK_OPR_LBRACE) {
@@ -116,7 +116,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
             }
             if (wcscmp(currentToken.value, L"var") == 0) {  // var:id[:type][=exp];
                 Symbol newVar = {};
-                if (index + 1 >= fun->body_token_count) {
+                if (index + 1 >= fun->bodyTokenCount) {
                     setError(ERR_DEF_VAR, currentToken.line, NULL);
                     return 255;
                 }
@@ -125,7 +125,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                     setError(ERR_DEF_VAR, currentToken.line, NULL);
                     return 255;
                 }
-                if (index + 1 >= fun->body_token_count) {
+                if (index + 1 >= fun->bodyTokenCount) {
                     setError(ERR_DEF_VAR, currentToken.line, NULL);
                     return 255;
                 }
@@ -144,14 +144,14 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                     setError(ERR_VAR_REPEATED, currentToken.line, NULL);
                     return 255;
                 }
-                if (index + 1 >= fun->body_token_count) {
+                if (index + 1 >= fun->bodyTokenCount) {
                     setError(ERR_DEF_VAR, currentToken.line, NULL);
                     return 255;
                 }
                 index++;  // 指向结束标志或:或=
                 if (fun->bodyTokens[index].type == TOK_OPR_COLON) {
                     newVar.isTypeKnown = true;
-                    if (index + 1 >= fun->body_token_count) {
+                    if (index + 1 >= fun->bodyTokenCount) {
                         setError(ERR_DEF_VAR, currentToken.line, NULL);
                         return 255;
                     }
@@ -162,7 +162,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                     }
                 }
                 // 提前越界检查，仅检查
-                if (index + 1 >= fun->body_token_count) {
+                if (index + 1 >= fun->bodyTokenCount) {
                     setError(ERR_DEF_VAR, currentToken.line, NULL);
                     return 255;
                 }
@@ -179,7 +179,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                         index++;
                         // int[]
                     } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->body_token_count) {
+                        if (index + 2 >= function->bodyTokenCount) {
                             setError(ERR_TYPE, currentToken.line, NULL);
                             return 255;
                         }
@@ -211,7 +211,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                         newVar.size = 4;  // 实为void*大小
                         index++;
                     } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->body_token_count) {
+                        if (index + 2 >= function->bodyTokenCount) {
                             setError(ERR_TYPE, currentToken.line, NULL);
                             return 255;
                         }
@@ -239,7 +239,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                         newVar.type.kind = IR_DT_CHAR_REFER;
                         index++;
                     } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->body_token_count) {
+                        if (index + 2 >= function->bodyTokenCount) {
                             setError(ERR_TYPE, currentToken.line, NULL);
                             return 255;
                         }
@@ -266,7 +266,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                         newVar.type.kind = IR_DT_STRING_REFER;
                         index++;
                     } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->body_token_count) {
+                        if (index + 2 >= function->bodyTokenCount) {
                             setError(ERR_TYPE, currentToken.line, NULL);
                             return 255;
                         }
@@ -301,7 +301,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                         newVar.type.kind = IR_DT_CUSTOM_REFER;
                         index++;
                     } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->body_token_count) {
+                        if (index + 2 >= function->bodyTokenCount) {
                             setError(ERR_TYPE, currentToken.line, NULL);
                             return 255;
                         }
@@ -322,7 +322,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                 }
                 tempLocalScopePtr->vars.push_back(newVar);
             } else if (wcscmp(currentToken.value, L"ret") == 0 || wcscmp(currentToken.value, L"返回") == 0) {
-                if (index + 1 >= fun->body_token_count) {
+                if (index + 1 >= fun->bodyTokenCount) {
                     setError(ERR_RET, currentToken.line, NULL);
                     return 255;
                 }
@@ -339,7 +339,7 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                     return 255;
                 }
                 index++;  // 指向表达式起始位置
-                ASTNode* expNode = parseExpression(fun->bodyTokens, &index, fun->body_token_count, feckPitchTable,
+                ASTNode* expNode = parseExpression(fun->bodyTokens, &index, fun->bodyTokenCount, feckPitchTable,
                                                    &tempLocalScope, tempOutsideScopes, blockNum, program->classes, &err);
                 if (err != 0 || !expNode) {
                     return 255;

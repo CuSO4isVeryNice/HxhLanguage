@@ -10,9 +10,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <wchar.h>
-#include <dlfcn.h>  //共享库相关
 #include <cstdlib>
-#include <list>
 #include <string>
 
 #include "GUIMenu/GUIMenu.h"
@@ -48,11 +46,6 @@ int main(int argc, char* argv[]) {
         _setmode(_fileno(stdout), _O_U16TEXT);
         _setmode(_fileno(stderr), _O_U16TEXT);
 #endif
-        /*if (argc < 2) {
-            fwprintf(stdout, L"\33[31m[ERR]\33[0m请提供源文件路径！\n");
-            return -1;
-        }
-        */
         std::string path = "";
         std::string objPath = "out.hxo";
 #ifdef HX_DEBUG
@@ -145,6 +138,12 @@ int main(int argc, char* argv[]) {
             freeIRProgram(&program);
             return -1;
         }
+        for (int i = 0; i < program->libPathList.size(); i++) {
+            if (program->libPathList[i]) objCode->constantPool.libNameList.push_back(program->libPathList[i]);
+        }
+#ifdef HX_DEBUG
+        log(L"libListSize:%d", objCode->constantPool.libNameList.size());
+#endif
 
         FILE* objFile = fopen(objPath.c_str(), "wb");
         writeObjectCode(objFile, *objCode);
@@ -161,4 +160,4 @@ int main(int argc, char* argv[]) {
         fwprintf(errorStream, L"\33[31m[ERR]\33[0m异常信息：%hs\n", e.what());
     }
 }
-//(≧▽≦) 
+//(≧▽≦)

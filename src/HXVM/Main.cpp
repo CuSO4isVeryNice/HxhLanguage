@@ -13,18 +13,18 @@ inline void initLocale(void);
 #include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
-#include <dlfcn.h>  //共享库相关
+#include <iostream>
+#include <filesystem>
+#include <string>
 #include <chrono>
 #include <csignal>
 
 #include "HxVector.h"
 #define errorStream stdout
 
+std::string objFilePath;
+
 #include <pthread.h>
-
-#include <iostream>
-
 #include "Interpreter.h"
 #include "ObjectReader.h"
 static void signalHandler(int signalNumber);
@@ -61,6 +61,7 @@ int main(int argc, char** argv) {
 #ifdef HX_DEBUG
     path = "../test/out.hxo";
 #endif
+    objFilePath = path;
     FILE* file = fopen(path.c_str(), "rb");
     // 读
     if (readObjectCode(file, objCode)) {

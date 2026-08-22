@@ -37,9 +37,12 @@ else()
     unset(LANG_zh_TW_MACRO) 
 endif() 
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(CMAKE_BUILD_TYPE STREQUAL "debug")
     set(HX_DEBUG_MACRO 1)
 endif()
+if(HX_DEBUG STREQUAL "ON")
+    set(HX_DEBUG_MACRO 1)
+endif ()
 
 if(NOT WIN32)
     if(OBJECT_OS STREQUAL "WINDOWS")

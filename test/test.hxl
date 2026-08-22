@@ -1,3 +1,5 @@
+lib:"TestLib.so";
+
 cls: Test {
     var:var1:int;
     var:var2:int;
@@ -9,19 +11,8 @@ cls: Test {
 cls: SubTest {
     var:subTestVar:float;
 }
+lib:fun:libFunTest():int;
 函数：主函数（无参数）->{
-    var:newVar:Test;
-    newVar:fun1();
-    newVar:var2 = 114;
-    newVar:var1 = newVar:var2;
-    newVar:var3:subTestVar = 514.0;
-
-    var: newArr: int[64];
-    newArr[4] = 114;
-    for: tmp:newArr -> {
-
-    }
-    var: tmp: int;
-    tmp = 114;
+    libFunTest();
     ret：0。  
 }
