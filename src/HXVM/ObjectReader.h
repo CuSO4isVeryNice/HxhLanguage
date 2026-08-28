@@ -11,11 +11,12 @@
 typedef uint8_t Opcode;
 enum {
     OP_NOP = 0,
-    OP_LOAD_CONST,  // 加载常量至栈顶 OP_LOAD_CONST <paramType> <paramValue> 或 OP_LOAD_CONST <constantIndex>
-    OP_LOAD_VAR,              // 加载变量至栈顶  LOAD_VAR <offest(u32)> <size(u32)(type为压栈后槽位标记的类型))>
-    OP_STORE_ARRAY_ELEMENT,         // 将栈顶值存入数组元素, 索引用栈顶  STORE_ARRAY_ELEMENT <offest(u32)> <size(按u32读>
-    OP_LOAD_ELEMENT_FROM_ARRAY,     // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)> <size(按u32读，type为压栈后槽位标记的类型)>
-    OP_LOAD_VARIABLE_FROM_ADDRESS,  // 1,读取并弹出次栈顶中的地址，2、加上偏移量(param[0]) 3、压栈
+    OP_LOAD_CONST,                   // 加载常量至栈顶 OP_LOAD_CONST <paramType> <paramValue> 或 OP_LOAD_CONST <constantIndex>
+    OP_LOAD_VAR,                     // 加载变量至栈顶  LOAD_VAR <offest(u32)> <size(u32)(type为压栈后槽位标记的类型))>
+    OP_STORE_ARRAY_ELEMENT,          // 将栈顶值存入数组元素, 索引用栈顶  STORE_ARRAY_ELEMENT <offest(u32)> <size(按u32读>
+    OP_LOAD_ELEMENT_FROM_ARRAY,      // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)>
+                                     // <size(按u32读，type为压栈后槽位标记的类型)>
+    OP_LOAD_VARIABLE_FROM_ADDRESS,   // 1,读取并弹出次栈顶中的地址，2、加上偏移量(param[0]) 3、压栈
     OP_STORE_VARIABLE_FROM_ADDRESS,  // 1,读取并弹出栈顶中的值，2、读取params[0],作为次栈值存的地址的偏移,
     // 3、读params[1]的value(u32),作为size4、传值给(次栈值存的地址+params[0].value)
     OP_POP,        // 弹出
@@ -39,9 +40,9 @@ enum {
     OP_INC,  // INC <offest> <varType>
     OP_DEC,
 
-    OP_JMP,  // OP_JMP <instAddr(u32)>
-    OP_JMP_CONDITION, // JMP_CONDITION <栈顶为真时跳转的地址(index u32)> <为假时跳转的地址(index u32)>
-    OP_CAL,  // CAL <procIndex>(u32) <paramCount>(u32)
+    OP_JMP,            // OP_JMP <instAddr(u32)>
+    OP_JMP_CONDITION,  // JMP_CONDITION <栈顶为真时跳转的地址(index u32)> <为假时跳转的地址(index u32)>
+    OP_CAL,            // CAL <procIndex>(u32) <paramCount>(u32)
     OP_RET,
     OP_PRINT_STRING,
     // 类型转换
@@ -105,7 +106,7 @@ typedef struct Constant {
 typedef struct ConstantPool {
     uint32_t size;
     Constant* constants;
-    HxVector<char*> libNameList; //所需动态库
+    HxVector<char*> libNameList;  // 所需动态库
 } ConstantPool;
 //----------------------------------
 typedef struct ObjectCodeHeader {
@@ -241,7 +242,7 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
             obj.constantPool.constants[i].value.asciiString = readString(file);
         }
     }
-    //读动态库路径
+    // 读动态库路径
     uint32_t libNameListSize = 0;
     if (fread(&libNameListSize, sizeof(uint32_t), 1, file) != 1) {
         fclose(file);
@@ -250,9 +251,9 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
 #ifdef HX_DEBUG
     wprintf(LOG_LABEL L"libNameListSize: %u\n", libNameListSize);
 #endif
-    for(int i = 0; i < libNameListSize; i++) {
+    for (int i = 0; i < libNameListSize; i++) {
         char* libName = readString(file);
-        if(libName) obj.constantPool.libNameList.push_back(libName);
+        if (libName) obj.constantPool.libNameList.push_back(libName);
     }
 #ifdef HX_DEBUG
     wprintf(LOG_LABEL L"libNameList.size(): %u\n", obj.constantPool.libNameList.size());

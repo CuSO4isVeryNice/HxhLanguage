@@ -1,10 +1,11 @@
 #pragma once
+#include <dlfcn.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <vector>
-#include <dlfcn.h>
 #include <wchar.h>
+
+#include <vector>
 /*
 #include "HXVM/ObjectReader.h"
 #include "HXVM/Interpreter.h"
@@ -35,11 +36,11 @@ typedef struct ArgSym {
         void* addressValue;
     } value;
     enum { TYPE_I32, TYPE_BYTE, TYPE_FLOAT, TYPE_DOUBLE, TYPE_BOOL, TYPE_UNI_CHAR, TYPE_ADDR } type;
-    _OpStack opStackParam; 
+    _OpStack opStackParam;
 } ArgSym;
 
 typedef struct SharedLibFunArg {
-   std::vector<ArgSym> args;
+    std::vector<ArgSym> args;
 } SharedLibFunArg;
 typedef _OpStack (*SharedLibFun)(SharedLibFunArg& arg);
 

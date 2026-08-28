@@ -23,7 +23,7 @@ typedef enum ErrorType {
     ERR_TYPE,
     ERR_MAIN,
     ERR_COUNLD_NOT_FIND_PARENT,
-    //ERR_UNKOWN_TYPE,
+    // ERR_UNKOWN_TYPE,
     ERR_NO_MAIN,
     ERR_CANNOT_FIND_SYMBOL,
     ERR_EXP,
@@ -40,7 +40,7 @@ typedef enum ErrorType {
     ERR_NO_VAR,
     ERR_CLASS_MEMBER_ACCESS,  // 类成员访问
     ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED,
-    ERR_SYNX_LIB_REF,       //引用动态库语法错误
+    ERR_SYNX_LIB_REF,  // 引用动态库语法错误
 } ErrorType;
 void initLocale(void) noexcept {
     // 设置Locale
@@ -324,67 +324,67 @@ void setError(ErrorType e, int errorLine, const wchar_t* errCode) noexcept {
     switch (e) {
         case ERR_NO_END: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]\33[0m语句缺少分号结尾喵(位于第%"
+                     L"\33[31m[ERR]\33[0m哈？杂鱼连分号都能忘？语句根本没结束喵！(位于第%"
                      L"d行)\n "
-                     L"\33[36m[NOTE]\33[0m后面应该是分号喵->\33[4m%"
+                     L"\33[36m[NOTE]\33[0m后面乖乖加上分号啦喵->\33[4m%"
                      L"ls\33[0m\n "
                      L"\33[36m[NOTE]\33["
-                     L"0m类体中变量或常量符号只能声明,赋值犯规了喵。",
+                     L"0m类里面的变量或者常量只能声明，随便赋值是犯规的喵！笨蛋杂鱼！",
                      errorLine, errCode ? errCode : L" ");
             break;
         }
         case ERR_CH_NO_END: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]\33[0m字符缺少结尾喵(位于第%d行)\n "
-                     L"\33[36m[NOTE]\33[0m这个字符缺结尾->%ls\n",
+                     L"\33[31m[ERR]\33[0m噗嗤，杂鱼写的字符连个单引号结尾都没有喵～(位于第%d行)\n "
+                     L"\33[36m[NOTE]\33[0m喏，就是这个缺了结尾哦->%ls喵～\n",
                      errorLine, errCode ? errCode : L" ");
             break;
         }
         case ERR_STR_NO_END: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]\33[0m虽然这个字符串太短了喵，但它沒结尾喵(位于第%d行)\n "
-                     L"\33[36m[NOTE]\33[0m这个字符串缺结尾->%ls\n",
+                     L"\33[31m[ERR]\33[0m诶～双引号都配不对？这串乱码连结尾都没有呢，杂鱼真是丢人喵～(位于第%d行)\n "
+                     L"\33[36m[NOTE]\33[0m缺结尾的在这->%ls喵～\n",
                      errorLine, errCode ? errCode : L" ");
             break;
         }
 
         case ERR_VAL: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]\33[0m字面量错误了喵(位于第%d行)\n "
-                     L"\33[36m[NOTE]\33[0m这个字面量写错了->%ls\n",
+                     L"\33[31m[ERR]\33[0m呜哇，这个数值或文本（字面量）全写错了喵！杂鱼大叔的脑子还好吗？(位于第%d行)\n "
+                     L"\33[36m[NOTE]\33[0m看看你写的什么蠢东西->%ls喵！\n",
                      errorLine, errCode ? errCode : L" ");
             break;
         }
 
         case ERR_HUAKUOHAO_NOT_CLOSE: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]花括号未正确闭合喵\33[0m！(位于第%"
+                     L"\33[31m[ERR]杂鱼～花括号不闭合，里面的代码都要掉出来了喵\33[0m！(位于第%"
                      L"d行)\n "
                      L"\33[36m[NOTE]\33["
-                     L"0m这个花括号没有对应的闭花括号->%ls\n",
+                     L"0m找不到右边另一半的孤儿括号在这哦->%ls喵～\n",
                      errorLine, errCode ? errCode : L" ");
             break;
         }
 
         case ERR_DEF_VAR: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]对定义变量语法错误了🥵\33[0m(位于第%"
+                     L"\33[31m[ERR]定义个变量都能写错，杂鱼果然只有这种程度喵？(￢_￢)\33[0m(位于第%"
                      L"d行)\n\33[36m["
-                     L"NOTE]\33[0mDefineVariable::= "
-                     L"<\"var\"><\":\"><id><\":\"><kw|id>;\n     "
-                     L"定义变量::= "
-                     L"<\"定义变量\"><\":\"><标识符><\",\"><"
+                     L"NOTE]\33[0m 听好了，正确写法是喵：\n     "
+                     L"var:变量名:类型名;\n     "
+                     L"或者中文版喵::= "
+                     L"<\"定义变量\"><\":\"><变量名><\",\"><"
                      L"\"类型是\"><\":\"><"
-                     L"标识符|关键字>;\n",
+                     L"类型名>;\n",
                      errorLine);
             break;
         }
 
         case ERR_DEF_CLASS_ACCESS: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]定义类时访问权限修饰符使用错误了喵\33["
+                     L"\33[31m[ERR]杂鱼！类的权限控制不是让你乱搞的喵\33["
                      L"0m(位于第%d行)"
-                     L"\n\33[36m[NOTE]\33[0m 声明类成员::= "
+                     L"\n\33[36m[NOTE]\33[0m 声明类成员的正确姿势::= "
                      L"\"[public\"|\"private\"|\"protected\"|"
                      L"\"公有成员\"|"
                      L"\"私有成员\"|\"受保护成员\" <\":\"> ] "
@@ -395,222 +395,227 @@ void setError(ErrorType e, int errorLine, const wchar_t* errCode) noexcept {
 
         case ERR_DEF_CLASS_DOUBLE_DEFINED_SYM: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]定义类时重复声明符号，犯规了喵\33[0m("
+                     L"\33[31m[ERR]哈？同一个名字你想在类里用几次？重复声明大犯规喵\33[0m("
                      L"位于第%d行)\n\33[36m["
-                     L"NOTE]\33[0m 此符号被重复声明-> %ls\n",
+                     L"NOTE]\33[0m 被我抓到的重复名字是这个哦-> %ls喵！\n",
                      errorLine, errCode ? errCode : L" ");
             break;
         }
 
         case ERR_DEF_CLASS: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]定义类的语法有误喵\33[0m(位于第%"
+                     L"\33[31m[ERR]连建个类都不会，杂鱼还是早点放弃写代码吧喵～\33[0m(位于第%"
                      L"d行)\n\33[36m[NOTE]\33["
-                     L"0m 定义类::= <\"定义类\"> "
-                     L"<\":\"> <id> [<\",\"> "
-                     L"<\"父类是\"> <\":\"> <id>]  <\"->\">"
+                     L"0m 给我看清楚格式喵::= <\"定义类\"> "
+                     L"<\":\"> <类名> [<\",\"> "
+                     L"<\"父类是\"> <\":\"> <父类名>]  <\"->\">"
                      L"<\"{\"> ... <\"}\">\n"
-                     L"DefineClass ::= class: [<id> ->] <id> {...}  #<id>->中的id为父类名\n",
+                     L"英文版喵 ::= class: [<子类名> ->] <父类名> {...}  #别再写错惹喵！\n",
                      errorLine);
             break;
         }
 
         case ERR_FUN: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]笨蛋！定义函数的语法犯规了喵\33[0m(位于第%"
+                     L"\33[31m[ERR]笨蛋杂鱼！定义函数的语法写得乱七八糟，根本看不懂喵\33[0m(位于第%"
                      L"d行)\n\33[36m["
-                     L"NOTE]\33[0m DefineFunction::= "
-                     L"[lib:] <\"fun\"><\":\"><id><\"(\"><args><\")\">[<\":\"><"
-                     L"id|kw>]<\"->\"><"
+                     L"NOTE]\33[0m 英文版喵::= "
+                     L"[lib:] <\"fun\"><\":\"><函数名><\"(\"><参数们><\")\">[<\":\"><"
+                     L"返回类型>]<\"->\"><"
                      L"\"{\">."
-                     L"..<\"}\">\n定义函数::= "
-                     L"[原生库：] <\"定义函数\"><\"：\"><标识符><\"(\"><参数><\")"
+                     L"..<\"}\">\n中文版喵::= "
+                     L"[原生库：] <\"定义函数\"><\"：\"><函数名><\"(\"><参数们><\")"
                      L"\">[<\",\"><"
-                     L"\"返回类型是\"><\"：\"><数据类型>]|[<\",\"><"
+                     L"\"返回类型是\"><\"：\"><返回类型>]|[<\",\"><"
                      L"\"无返回类型\">] <\"->\"> <"
                      L"\"{\">...<\"}\">"
-                     L"\n\33[36m[NOTE]\33[0m函数体内不可定义函数喵\n"
-                     L"\n\33[36m[NOTE]\33[0m如果是原生库函数定义，就不应该有函数体喵\n",
+                     L"\n\33[36m[NOTE]\33[0m函数里面不能再套函数哦，笨蛋喵！\n"
+                     L"\n\33[36m[NOTE]\33[0m如果是原生库函数，就别画蛇添足写大括号里的内容了喵！\n",
                      errorLine);
             break;
         }
 
         case ERR_FUN_ARG: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]对定义函数的参数的语法犯错误了\33["
+                     L"\33[31m[ERR]参数写得跟狗啃的一样，杂鱼大叔真恶心喵～\33["
                      L"0m(位于第%d行)\n\33["
-                     L"36m[NOTE]\33[0m Argument::= "
-                     L"<id><\":\"><id|kw>\n参数::= "
-                     L"<标识符><\":\"><标识符|关键字>",
+                     L"36m[NOTE]\33[0m 乖乖写成喵::= "
+                     L"<参数名><\":\"><参数类型>\n",
                      errorLine);
             break;
         }
 
         case ERR_TYPE: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]对类型拼写犯错误了\33[0m(位于第%d行)"
+                     L"\33[31m[ERR]这是什么外星类型？杂鱼是想自己发明语言吗喵\33[0m(位于第%d行)"
                      L"\n\33[36m["
-                     L"NOTE]\33[0m ArrayType::= "
-                     L"<id|kw>[<\"[\"><\"]\">...]\n参数::= "
-                     L"<标识符|关键字>[<\"[\"><\"]\">...]",
+                     L"NOTE]\33[0m 数组类型要写清楚喵::= "
+                     L"<类型名>[<\"[\"><\"]\">...]\n",
                      errorLine);
             break;
         }
 
         case ERR_MAIN: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]对主函数犯错误了\33[0m(位于第%d行)"
+                     L"\33[31m[ERR]杂鱼！主函数(Main)是唯一的，居然敢重载，想死吗喵\33[0m(位于第%d行)"
                      L"\n\33[36m[NOTE]"
-                     L"\33[0m 主函数不能重载！\n",
+                     L"\33[0m 主函数绝对不可以有多个版本喵！\n",
                      errorLine);
             break;
         }
 
         case ERR_COUNLD_NOT_FIND_PARENT: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]找不到父类喵\33[0m(位于第%d行)"
+                     L"\33[31m[ERR]找～不～到～哦！你要继承的父类根本不存在喵\33[0m(位于第%d行)"
                      L"\n\33[36m[NOTE]\33["
-                     L"0m 这个父类找不到->%ls\n",
+                     L"0m 失踪的父类叫这个->%ls喵～\n",
                      errorLine, errCode);
             break;
         }
 
-        
-
         case ERR_NO_MAIN: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]没有主函数喵\33[0m\n");
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]诶？连程序入口(Main函数)都没有，杂鱼是想让电脑猜你要运行什么吗喵？笑死人了～\33[0m\n");
             break;
         }
 
         case ERR_CANNOT_FIND_SYMBOL: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]找不到符号(%ls)喵\33[0m\n",
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]喵呜？根本没有(%ls)这个东西嘛！杂鱼又在无中生有了喵！\33[0m\n",
                      errCode ? errCode : L"(null)");
             break;
         }
 
         case ERR_EXP: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]表达式错误(%ls)了喵\33[0m\n",
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]表达式完全不通！杂鱼的逻辑简直是灾难喵～(%ls)\33[0m\n",
                      errCode ? errCode : L"(null)");
             break;
         }
 
         case ERR_OUT_OF_VALUE: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]啊♡~数值太......太大了......"
-                     L"要溢出来了♡......(%ls)"
-                     L"\33[0m\n",
+                     L"\33[31m[ERR]呜呀♡~杂鱼塞进来的数值太......太大了......"
+                     L"马上就要溢出来了♡......(%ls)"
+                     L"笨蛋！算术都不会吗喵！\33[0m\n",
                      errCode ? errCode : L"？？？？");
             break;
         }
 
         case ERR_GLOBAL_UNKOWN: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]未知的全局定义！\33[0m(位于第%d行)\n", errorLine);
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]这是什么鬼全局定义？杂鱼不要把垃圾随便扔在外面喵！\33[0m(位于第%d行)\n", errorLine);
             break;
         }
 
         case ERR_FUN_REPEATED: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]函数重复定义了喵\33[0m(位于第%d行)\n", errorLine);
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]名字一样的函数写了两次？杂鱼的脑容量只有金鱼级别吗喵？\33[0m(位于第%d行)\n", errorLine);
             break;
         }
 
         case ERR_CLASS_REPEATED: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]类重复定义了喵\33[0m(位于第%d行)\n", errorLine);
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]哈？这个类已经存在了哦！杂鱼连自己写过什么都不记得了吗喵？\33[0m(位于第%d行)\n", errorLine);
             break;
         }
 
         case ERR_RET: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]笨蛋！返回语句语法错误了喵\33[0m(位于第%"
+                     L"\33[31m[ERR]笨蛋杂鱼！返回值语法错啦！连送个东西都不会喵？\33[0m(位于第%"
                      L"d行)\n\33[36m["
-                     L"NOTE]\33[0m 返回::= ret:exp | 返回：exp\n",
+                     L"NOTE]\33[0m 应该是喵::= ret:返回值 | 返回：返回值\n",
                      errorLine);
             break;
         }
         case ERR_UNKNOWN_TYPE: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]这是什么类型喵？  "
-                     L"%ls\33[0m(位于第%d行)\n",
+                     L"\33[31m[ERR]喵喵喵？这是什么奇怪的类型？  "
+                     L"%ls\33[0m杂鱼的妄想产物吗喵？(位于第%d行)\n",
                      errCode ? errCode : L" ", errorLine);
             break;
         }
         case ERR_NO_VAR: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]这是什么符号喵？（好奇）  "
-                     L"%ls\33[0m(位于第%d行)\n",
+                     L"\33[31m[ERR]盯—— 这是什么符号喵？（好奇）  "
+                     L"%ls\33[0m杂鱼写出了一堆乱码呢～完全不认识喵！(位于第%d行)\n",
                      errCode ? errCode : L" ", errorLine);
             break;
         }
         case ERR_RET_VAL: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]返回值错误了喵\33[0m(位于第%d行)\n", errorLine);
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]返回的东西根本不对嘛！杂鱼又在拿假货骗人喵？\33[0m(位于第%d行)\n", errorLine);
             break;
         }
         case ERR_REPEAT: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]循环语句错误了喵\33[0m(位于第%d行)"
+                     L"\33[31m[ERR]转呀转呀转晕了喵！杂鱼的循环语句写得烂透了！\33[0m(位于第%d行)"
                      L"\n\33[36m[NOTE]"
-                     L"\33[0m 循环 ::= repeat-> 语句|块 [until(exp)]\n",
+                     L"\33[0m 乖乖用喵 ::= repeat-> 语句或者大括号 [until(条件)]\n",
                      errorLine);
             break;
         }
 
         case ERR_IF: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]对条件判断语句犯错误了喵～\33["
+                     L"\33[31m[ERR]如果杂鱼是笨蛋，那你的 if 语句也是错的喵！\33["
                      L"0m(位于第%d行)\n\33["
-                     L"36m[NOTE]\33[0m 条件判断 ::= if: 表达式 -> "
-                     L"语句|块\n",
+                     L"36m[NOTE]\33[0m 这样写才对喵 ::= if: 条件 -> "
+                     L"语句或者大括号\n",
                      errorLine);
             break;
         }
 
         case ERR_VAR_REPEATED: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]变量不能重复定义的喵～笨蛋！\33["
+                     L"\33[31m[ERR]杂鱼杂鱼～同一个变量名用两次是犯规的喵！笨蛋大叔！\33["
                      L"0m(位于第%d行)\n",
                      errorLine);
             break;
         }
         case ERROR_UNCOMPLETED_CLASS: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]杂鱼~你的类相互包含了喵~("
-                     L"如：类A里有类B类型成员，而类B里又有类A类型成员)"
-                     L"如果不报错，占的内存就太......太大了。电脑会坏..."
-                     L"...坏掉了...."
-                     L".\33[0m(位于第%d行)\n",
+                     L"\33[31m[ERR]呜哇~ 杂鱼写的类居然互相包含了喵~("
+                     L"比如A里面有B，B里面又有A)"
+                     L"再这样套娃下去，内存就要被杂鱼撑坏了喵......坏掉了啦♡"
+                     L"\33[0m(位于第%d行)\n",
                      errorLine);
             break;
         }
         case ERROR_INC_OR_DEC_OP_VAR: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]该类型的变量是不支持自增或自减的喵～笨蛋！\33["
+                     L"\33[31m[ERR]哈？这种类型也想自增自减？杂鱼大叔在做梦喵！完全不支持哦笨蛋！\33["
                      L"0m(位于第%d行)\n",
                      errorLine);
             break;
         }
         case ERR_FOR: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]遍历语句语法错误了喵～\33["
+                     L"\33[31m[ERR]遍历都不会写，杂鱼真是没救了喵！\33["
                      L"0m(位于第%d行)\n\33["
-                     L"36m[NOTE]\33[0m 遍历语句 ::= for: id(tmp):id(arr) -> "
-                     L"语句|块\n 或者：\n 遍历语句 ::= 遍历： id(数组)，中间变量：id(中间变量)",
+                     L"36m[NOTE]\33[0m 给我记死在脑子里喵 ::= for: 每次拿出来的变量名:数组名 -> "
+                     L"语句或者大括号\n 或者中文喵 ::= 遍历： 数组名，中间变量：每次拿出来的变量名",
                      errorLine);
             break;
         }
         case ERR_CLASS_MEMBER_ACCESS: {
             swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
-                     L"\33[31m[ERR]类成员访问语法犯规了喵～笨蛋！\33["
+                     L"\33[31m[ERR]杂鱼！乱摸别人的成员是不行的喵！语法犯规了笨蛋！\33["
                      L"0m(位于第%d行)\n"
-                     L"\33[36m[NOTE]\33[0m 变量所属类型无该成员也会报错喵；类成员访问 ::= id(类)：类成员访问\n",
+                     L"\33[36m[NOTE]\33[0m 要用 名字(类):成员 才可以访问，或者这个类根本没有这个成员喵！\n",
                      errorLine);
             break;
         }
         case ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR]这个表达式不支持类成员访问喵～\33[0m在第%d行\n",
-                     errorLine);
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]诶～这个东西根本没有成员给你访问哦，杂鱼不要随便发情乱碰喵！\33[0m在第%d行\n", errorLine);
             break;
         }
         case ERR_SYNX_LIB_REF: {
-            swprintf(errorMessageBuffer, ERROR_BUF_SIZE, L"\33[31m[ERR] 引用动态库的语法犯规了喵\33[0m在第%d行\n\33[36m[NOTE]\33[0m 引用动态库::= lib:string|原生库：string", errorLine);
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR]连引个动态库都能搞砸，杂鱼就是杂鱼喵～\33[0m在第%d行\n\33[36m[NOTE]\33[0m "
+                     L"这么简单的都不会吗喵::= "
+                     L"lib:库名|原生库：库名",
+                     errorLine);
             break;
         }
     }

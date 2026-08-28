@@ -20,7 +20,7 @@ static int getVarSize(IR_DataType type, std::vector<IR_Class*>& class_table);
 extern int setClassVarMemOffset(IR_Class* cls, std::vector<IR_Class*>& classTable);
 extern int setClassVarMemSize(IR_Class* cls, std::vector<IR_Class*>& classTable);
 extern int addHeapAllocInst(std::vector<Procedure*>& procTable, std::vector<IR_Class*>& classTable,
-                           std::vector<std::vector<SymbolTable>>& symbols);
+                            std::vector<std::vector<SymbolTable>>& symbols);
 extern PackedClassVarMem* findVarMemberInClass(const wchar_t* varMemName, IR_Class* cls, std::vector<IR_Class*>& classTable);
 extern PackedClassFunMem* findFunInClass(IR_Function& fun, IR_Class* cls, std::vector<IR_Class*>& classTable);
 extern IR_Class* getClassByName(const wchar_t* className, std::vector<IR_Class*> classTable);
@@ -29,7 +29,7 @@ static int addClassAllocInst(IR_Class* cls, std::vector<Procedure*>& procTable, 
                              std::vector<std::vector<SymbolTable>>& symbols);
 static int generateInstanceAllocInst(int writeStackOffest /*递归调用时设为-1*/, Symbol& instance, IR_Class* cls,
                                      std::vector<IR_Class*>& classTable, std::vector<Instruction>& instList,
-                                     int writeHeapOffest=-1);                             
+                                     int writeHeapOffest = -1);
 int addHeapAllocInst(std::vector<Procedure*>& procTable, std::vector<IR_Class*>& classTable,
                      std::vector<std::vector<SymbolTable>>& symbols) {
     for (int i = 0; i < classTable.size(); i++) {
@@ -132,7 +132,7 @@ static int generateInstanceAllocInst(int writeStackOffest /*递归调用时设�
             generateInstanceAllocInst(-1, instance, memberClass, classTable, instList, heapOffest);
         }
     }
-    for(int i = 0; i < cls->body.privateMembers.size(); i++) {
+    for (int i = 0; i < cls->body.privateMembers.size(); i++) {
         if (cls->body.privateMembers.at(i).type != IR_CM_VARIABLE) continue;
         if (cls->body.privateMembers.at(i).data.variable->type.kind == IR_DT_CUSTOM) {
             IR_Class* memberClass =
@@ -142,7 +142,7 @@ static int generateInstanceAllocInst(int writeStackOffest /*递归调用时设�
             generateInstanceAllocInst(-1, instance, memberClass, classTable, instList, heapOffest);
         }
     }
-    for(int i = 0; i < cls->body.protectedMembers.size(); i++) {
+    for (int i = 0; i < cls->body.protectedMembers.size(); i++) {
         if (cls->body.protectedMembers.at(i).type != IR_CM_VARIABLE) continue;
         if (cls->body.protectedMembers.at(i).data.variable->type.kind == IR_DT_CUSTOM) {
             IR_Class* memberClass =

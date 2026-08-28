@@ -5,10 +5,10 @@
 #include <stdlib.h>
 #include <wchar.h>
 
-#include "Warning.h"
 #include "Error.h"
 #include "Lexer.h"
 #include "SymbolTable.h"
+#include "Warning.h"
 class FunCallPitch;
 #include "Checker.h"
 #ifdef HX_DEBUG
@@ -66,27 +66,27 @@ IR_Program* generateIR(Tokens* tokens, int* err) {
         // 解析全局变量、函数或类定义
         if (tokens->tokens[index].type == TOK_KW) {
             if (wcscmp(tokens->tokens[index].value, L"lib") == 0) {
-                //lib|原生库 ： <函数声明>
-                //lib|原生库: str
-                // 解析到一个库函数定义
-                if (index+1 >= tokens->count) {
+                // lib|原生库 ： <函数声明>
+                // lib|原生库: str
+                //  解析到一个库函数定义
+                if (index + 1 >= tokens->count) {
                     setError(ERR_SYNX_LIB_REF, tokens->tokens[index].line, nullptr);
                     *err = 255;
                     freeIRProgram(&program);
-                    return  NULL;
+                    return NULL;
                 }
                 index++;
-                if(tokens->tokens[index].type != TOK_OPR_COLON) {
+                if (tokens->tokens[index].type != TOK_OPR_COLON) {
                     setError(ERR_FUN, tokens->tokens[index].line, NULL);
                     *err = 255;
                     freeIRProgram(&program);
                     return NULL;
                 }
-                if (index+1 >= tokens->count) {
+                if (index + 1 >= tokens->count) {
                     setError(ERR_SYNX_LIB_REF, tokens->tokens[index].line, nullptr);
                     *err = 255;
                     freeIRProgram(&program);
-                    return  NULL;
+                    return NULL;
                 }
                 index++;
                 if (tokens->tokens[index].type == TOK_VAL) {
@@ -94,29 +94,29 @@ IR_Program* generateIR(Tokens* tokens, int* err) {
                         setError(ERR_SYNX_LIB_REF, tokens->tokens[index].line, nullptr);
                         *err = 255;
                         freeIRProgram(&program);
-                        return  NULL;
+                        return NULL;
                     }
                     int libPathLen = std::wcstombs(nullptr, tokens->tokens[index].value, 0);
-                    char* libPath = (char*)calloc(libPathLen+1, sizeof(char));
+                    char* libPath = (char*)calloc(libPathLen + 1, sizeof(char));
                     if (!libPath) {
                         *err = -1;
                         freeIRProgram(&program);
-                        return  NULL;
+                        return NULL;
                     }
                     std::wcstombs(libPath, tokens->tokens[index].value, libPathLen);
                     program->libPathList.push_back(libPath);
-                    if (index+1 >= tokens->count) {
+                    if (index + 1 >= tokens->count) {
                         setError(ERR_SYNX_LIB_REF, tokens->tokens[index].line, nullptr);
                         *err = 255;
                         freeIRProgram(&program);
-                        return  NULL;
+                        return NULL;
                     }
                     index++;
                     if (tokens->tokens[index].type != TOK_END) {
                         setError(ERR_SYNX_LIB_REF, tokens->tokens[index].line, nullptr);
                         *err = 255;
                         freeIRProgram(&program);
-                        return  NULL;
+                        return NULL;
                     }
                 } else {
                     IR_Function* func = parseFunction(tokens, &index, err);
@@ -141,7 +141,8 @@ IR_Program* generateIR(Tokens* tokens, int* err) {
                         if (program->functions[index]->name) hxFree(program->functions[index]->name);
                         if (program->functions[index]->params) {
                             for (int i = 0; i < program->functions[index]->paramCount; i++) {
-                                if (program->functions[index]->params[i].name) hxFree(program->functions[index]->params[i].name);
+                                if (program->functions[index]->params[i].name)
+                                    hxFree(program->functions[index]->params[i].name);
                             }
                             hxFree(program->functions[index]->params);
                         }
@@ -475,7 +476,7 @@ void freeIRProgram(IR_Program** program) {
             hxFree((*program)->globalVars);
             (*program)->globalVars = NULL;
         }
-        for (int i =0 ; i < (*program)->libPathList.size(); i++) {
+        for (int i = 0; i < (*program)->libPathList.size(); i++) {
             if ((*program)->libPathList[i]) {
                 free((*program)->libPathList[i]);
                 (*program)->libPathList[i] = NULL;
@@ -1314,10 +1315,10 @@ static IR_Function* parseFunction_CN(Tokens* tokens, int* index, int* err, bool 
         function->bodyTokens[i] = tokens->tokens[body_start_index + i];
     }
     (*index)++;
-    if(isFocedNativeLibFun) {
+    if (isFocedNativeLibFun) {
         setWarning(WARN_NATIVE_LIB_FUN_HAS_BODY, tokens->tokens[*index].line, function->name);
-        for(int i = 0; i < function->bodyTokenCount; i++) {
-            if(function->bodyTokens[i].value) {
+        for (int i = 0; i < function->bodyTokenCount; i++) {
+            if (function->bodyTokens[i].value) {
                 free(function->bodyTokens[i].value);
                 function->bodyTokens[i].value = NULL;
             }
@@ -1576,10 +1577,10 @@ static IR_Function* parseFunction_EN(Tokens* tokens, int* index, int* err, bool 
         function->bodyTokens[i] = tokens->tokens[body_start_index + i];
     }
     (*index)++;
-    if(isFocedNativeLibFun) {
+    if (isFocedNativeLibFun) {
         setWarning(WARN_NATIVE_LIB_FUN_HAS_BODY, tokens->tokens[*index].line, function->name);
-        for(int i = 0; i < function->bodyTokenCount; i++) {
-            if(function->bodyTokens[i].value) {
+        for (int i = 0; i < function->bodyTokenCount; i++) {
+            if (function->bodyTokens[i].value) {
                 free(function->bodyTokens[i].value);
                 function->bodyTokens[i].value = NULL;
             }

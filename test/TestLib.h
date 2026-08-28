@@ -1,9 +1,10 @@
 //
 // Created by cuso4 on 2026/8/22.
 //
+#include <stdint.h>
+
 #include <cstdlib>
 #include <vector>
-#include <stdint.h>
 #ifndef HXHLANGUAGE_TESTLIB_H
 #define HXHLANGUAGE_TESTLIB_H
 typedef enum OpStackType {
@@ -37,7 +38,7 @@ typedef struct ArgSym {
         void* addressValue;
     } value;
     enum { TYPE_I32, TYPE_BYTE, TYPE_FLOAT, TYPE_DOUBLE, TYPE_BOOL, TYPE_UNI_CHAR, TYPE_ADDR } type;
-    _OpStack opStackParam; //栈中参数
+    _OpStack opStackParam;  // 栈中参数
 } ArgSym;
 
 typedef struct SharedLibFunArg {

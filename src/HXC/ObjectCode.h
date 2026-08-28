@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <wchar.h>
+
 #include <cstdio>
 #include <string>
 
@@ -11,15 +12,17 @@
 typedef uint8_t Opcode;
 enum {
     OP_NOP = 0,
-    OP_LOAD_CONST,  // 加载常量至栈顶 OP_LOAD_CONST <paramType> <paramValue> 或 OP_LOAD_CONST <constantIndex>
-    OP_LOAD_VAR,              // 加载变量至栈顶  LOAD_VAR <offest(u32)> <size(u32)(type为压栈后槽位标记的类型))>
-    OP_STORE_ARRAY_ELEMENT,         // 将栈顶值存入数组元素, 索引用栈顶  STORE_ARRAY_ELEMENT <offest(u32)> <size(按u32读>
-    OP_LOAD_ELEMENT_FROM_ARRAY,     // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)> <size(按u32读，type为压栈后槽位标记的类型)>
-    OP_LOAD_VARIABLE_FROM_ADDRESS,  // 1,读取并弹出次栈顶中的地址，2、加上偏移量(param[0]) 3、压栈
-    OP_STORE_VARIABLE_FROM_ADDRESS,  //将栈顶值写入次栈项的地址 1,读取并弹出栈顶中的值，2、读取params[0],作为次栈值存的地址的偏移,
-                                     // 3、读params[1]的value(u32),作为size4、传值给(次栈值存的地址+params[0].value)
-    OP_POP,        // 弹出
-    OP_STORE_VAR,  // 将栈顶值存入变量  OP_STORE_VAR <offest(u32)>
+    OP_LOAD_CONST,                   // 加载常量至栈顶 OP_LOAD_CONST <paramType> <paramValue> 或 OP_LOAD_CONST <constantIndex>
+    OP_LOAD_VAR,                     // 加载变量至栈顶  LOAD_VAR <offest(u32)> <size(u32)(type为压栈后槽位标记的类型))>
+    OP_STORE_ARRAY_ELEMENT,          // 将栈顶值存入数组元素, 索引用栈顶  STORE_ARRAY_ELEMENT <offest(u32)> <size(按u32读>
+    OP_LOAD_ELEMENT_FROM_ARRAY,      // 加载数组元素至栈顶， 索引用栈顶  LOAD_ELEMENT_FROM_ARRAY <offest(u32)>
+                                     // <size(按u32读，type为压栈后槽位标记的类型)>
+    OP_LOAD_VARIABLE_FROM_ADDRESS,   // 1,读取并弹出次栈顶中的地址，2、加上偏移量(param[0]) 3、压栈
+    OP_STORE_VARIABLE_FROM_ADDRESS,  // 将栈顶值写入次栈项的地址
+                                     // 1,读取并弹出栈顶中的值，2、读取params[0],作为次栈值存的地址的偏移,
+                                     //  3、读params[1]的value(u32),作为size4、传值给(次栈值存的地址+params[0].value)
+    OP_POP,                          // 弹出
+    OP_STORE_VAR,                    // 将栈顶值存入变量  OP_STORE_VAR <offest(u32)>
     // <copySize(u32, type表示栈顶应转换的类型)>
 
     OP_ADD,
@@ -39,9 +42,9 @@ enum {
     OP_INC,  // INC <offest> <varType>
     OP_DEC,
 
-    OP_JMP,  // OP_JMP <instAddr(u32)>
-    OP_JMP_CONDITION, // JMP_CONDITION <栈顶为真时跳转的地址(index u32)> <为假时跳转的地址(index u32)>
-    OP_CAL,  // CAL <procIndex>(u32) <paramCount>(u32)
+    OP_JMP,            // OP_JMP <instAddr(u32)>
+    OP_JMP_CONDITION,  // JMP_CONDITION <栈顶为真时跳转的地址(index u32)> <为假时跳转的地址(index u32)>
+    OP_CAL,            // CAL <procIndex>(u32) <paramCount>(u32)
     OP_RET,
     OP_PRINT_STRING,
     // 类型转换
@@ -74,7 +77,7 @@ enum {
 typedef struct Param {
     ParamType type;  // char
     uint8_t size;
-    char value[8] = {0,0,0,0,0,0,0,0};
+    char value[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     int offest = 0;   // 偏移量增加的量
     int sizeAdd = 0;  // 大小增加的量
 } Param;
@@ -111,7 +114,7 @@ typedef struct Constant {
 typedef struct ConstantPool {
     uint32_t size = 0;
     Constant* constants = NULL;
-    std::vector<char*> libNameList; //所需动态库
+    std::vector<char*> libNameList;  // 所需动态库
 } ConstantPool;
 //----------------------------------
 typedef struct ObjectCodeHeader {
@@ -121,7 +124,7 @@ typedef struct ObjectCodeHeader {
 //--------------------------------------
 typedef struct ObjectCode {
     ObjectCodeHeader header;
-    
+
     ConstantPool constantPool;
     uint32_t procedureSize = 0;
     std::vector<Procedure*> procedures;
@@ -323,7 +326,7 @@ static int writeInstruction(Instruction& inst, FILE* file) {
             break;
         case OP_CAL_NATIVE:
             fwprintf(logStream, L"\33[1;34m OP_CAL_NATIVE\33[0m\n");
-            break;    
+            break;
         default:
             fwprintf(logStream, L"\33[1;32mOP_NOP\33[0m)\n");
     }
@@ -380,12 +383,12 @@ int writeObjectCode(FILE* objFile, ObjectCode& obj) noexcept {
             if (writeString(obj.constantPool.constants[i].value.asciiString, objFile)) return -1;
         }
     }
-    //写obj.constantPool.libNameList
+    // 写obj.constantPool.libNameList
     uint32_t libNameListSize = (uint32_t)obj.constantPool.libNameList.size();
     if (fwrite(&(libNameListSize), sizeof(uint32_t), 1, objFile) != 1) return -1;
-    for(int i = 0; i < obj.constantPool.libNameList.size(); i++) {
+    for (int i = 0; i < obj.constantPool.libNameList.size(); i++) {
 #ifdef HX_DEBUG
-        log(L"写入库路径:%s", obj.constantPool.libNameList.at(i)? obj.constantPool.libNameList.at(i): "(null)");
+        log(L"写入库路径:%s", obj.constantPool.libNameList.at(i) ? obj.constantPool.libNameList.at(i) : "(null)");
 #endif
         if (writeString(obj.constantPool.libNameList.at(i), objFile)) return -1;
     }

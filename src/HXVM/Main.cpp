@@ -1,7 +1,12 @@
 #include <atomic>
-
+#include <filesystem>
+#if defined(_LIBCPP_VERSION) && (_LIBCPP_VERSION < 110000)
+namespace std {
+namespace filesystem = __fs::filesystem;
+}
+#endif
 #include "config.h"
-std::atomic<bool> shouldExit {false}; // 要退出吗，用于处理SIGINT
+std::atomic<bool> shouldExit{false};  // 要退出吗，用于处理SIGINT
 #define OP_STACK_SIZE 512             // 操作数栈大小
 #define HXVM_VERSION 0.114f
 #define ERR_LABEL L"\33[1;31m[E]\33[0m"
@@ -13,11 +18,11 @@ inline void initLocale(void);
 #include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <iostream>
-#include <filesystem>
-#include <string>
+
 #include <chrono>
 #include <csignal>
+#include <iostream>
+#include <string>
 
 #include "HxVector.h"
 #define errorStream stdout
@@ -25,6 +30,7 @@ inline void initLocale(void);
 std::string objFilePath;
 
 #include <pthread.h>
+
 #include "Interpreter.h"
 #include "ObjectReader.h"
 static void signalHandler(int signalNumber);

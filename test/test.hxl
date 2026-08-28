@@ -5,14 +5,24 @@ cls: Test {
     var:var2:int;
     var:var3:SubTest;
     fun:fun1():void -> {
-        __hx_write_string__ "Test:fun1\n";
+        __hx_write_string__ "[HXVM] 来自类Test\n";
     }
 }
+
 cls: SubTest {
     var:subTestVar:float;
 }
+
 lib:fun:libFunTest():int;
+
 函数：主函数（无参数）->{
+    __hx_write_string__ "---------------------------------------------\n";
+    __hx_write_string__ " HxHLanguage VM v0.114 - 本地库 \n";
+    __hx_write_string__ "---------------------------------------------\n";
+    
     libFunTest();
-    ret：0。  
+    
+    var:newVar:Test;
+    newVar:fun1();
+    ret：0。
 }

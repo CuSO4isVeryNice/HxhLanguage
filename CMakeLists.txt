@@ -2,6 +2,11 @@
 
 cmake_minimum_required(VERSION 3.5...3.25)
 
+project(HxHLanguage VERSION 0.114 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 ########配置文件
 set(CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/config.txt")
 
@@ -63,7 +68,6 @@ configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/HXVM/config.h"
 )
 
-project(HxHLanguage VERSION 0.114 LANGUAGES CXX)
 #################
 
 if(MSVC)
@@ -122,15 +126,47 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     target_link_options(hxvm PRIVATE "-Wl,-z,common-page-size=65536" "-Wl,-z,max-page-size=65536")
 endif()
 
+set_directory_properties(PROPERTIES
+    ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/HXC/config.h;${CMAKE_CURRENT_SOURCE_DIR}/src/HXVM/config.h"
+)
+
+
+install(TARGETS hxc hxvm DESTINATION bin)
+
+set(CPACK_PACKAGE_NAME "hxhlanguage")
+set(CPACK_PACKAGE_VENDOR "ys452188")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "HxHLanguage Compiler and Virtual Machine")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_MAINTAINER "ys452188")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "ys452188")
+set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+include(CPack)
+
+########################################################
+# 针对 OBJECT_OS 的自动构建打包动作
+########################################################
 if(OBJECT_OS STREQUAL "ANDROID_TERMUX")
     add_custom_command(
         TARGET hxvm
         POST_BUILD
         COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/TermuxPackage.sh"
-        COMMENT "打包中"
+        COMMENT "Termux 打包中喵..."
+    )
+elseif(OBJECT_OS STREQUAL "DEB")
+    add_custom_command(
+        TARGET hxvm
+        POST_BUILD
+        COMMAND cpack -G DEB
+        COMMENT "正在自动生成 Debian 安装包 (.deb) 喵..."
+    )
+elseif(OBJECT_OS STREQUAL "ARCH")
+    add_custom_command(
+        TARGET hxvm
+        POST_BUILD
+        COMMAND cpack -G TXZ
+        COMMENT "正在自动生成 Arch Linux 归档安装包 (.tar.xz) 喵..."
     )
 endif()
-
-set_directory_properties(PROPERTIES
-    ADDITIONAL_CLEAN_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/HXC/config.h;${CMAKE_CURRENT_SOURCE_DIR}/src/HXVM/config.h"
-)
