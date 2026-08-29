@@ -34,9 +34,17 @@ inline void hxFree(void* ptr) {
 std::string getDirectory(const std::string& path) {
     size_t pos = path.find_last_of("/\\"); // 兼容 Windows 和 Linux
     if (pos == std::string::npos) {
-        return "."; // 没有路径，使用当前目录
+#ifdef _WIN32
+        return ".\\";
+#else
+        return "./";
+#endif
     }
-    return path.substr(0, pos+1);
+#ifdef _WIN32
+    return path.substr(0, pos)+"\\";
+#else
+    return path.substr(0, pos)+"/";
+#endif
 }
 #include "Error.h"
 #include "Generator.h"

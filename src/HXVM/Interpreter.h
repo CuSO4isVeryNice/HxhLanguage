@@ -1489,9 +1489,9 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                     continue;
                 }
 #else
-                handle = dlopen(libPath, RTLD_LAZY);
+                handle = dlopen(libPath.c_str(), RTLD_LAZY);
                 if (!handle) {
-                    fwprintf(errorStream, ERR_LABEL L"dlopen(\"%s\") 失败: %s\n", libPath, dlerror());
+                    fwprintf(errorStream, ERR_LABEL L"dlopen(\"%s\") 失败: %s\n", libPath.c_str(), dlerror());
                     continue;
                 }
 #endif
