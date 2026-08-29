@@ -1,4 +1,5 @@
 lib:"TestLib.so";
+lib:"TestLib.dll";
 
 cls: Test {
     var:var1:int;

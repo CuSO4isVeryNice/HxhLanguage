@@ -18,7 +18,10 @@ inline void initLocale(void);
 #include <locale.h>
 #include <stdint.h>
 #include <stdio.h>
-
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 #include <chrono>
 #include <csignal>
 #include <iostream>

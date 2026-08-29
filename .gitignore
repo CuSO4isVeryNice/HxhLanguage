@@ -4,3 +4,4 @@ bin/
 .vscode/
 *.bak
 .idea/
+cmake-build-debug/

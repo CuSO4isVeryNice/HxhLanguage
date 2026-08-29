@@ -1,5 +1,9 @@
 #pragma once
-#include <dlfcn.h>
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <dlfcn.h>
+#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,14 +53,22 @@ typedef _OpStack (*SharedLibFun)(SharedLibFunArg& arg);
 extern LibFun::SharedLibFun loadSharedLibFunction(const char* libPath, const char* funcName);
 
 LibFun::SharedLibFun loadSharedLibFunction(void* handle, const char* funcName) {
-    if (!handle) {
-        return nullptr;
-    }
-
+    if (!handle) return nullptr;
+#ifdef _WIN32
+    void* funcPtr = (void*)GetProcAddress((HMODULE)handle, funcName);
+#else
     void* funcPtr = dlsym(handle, funcName);
-    if (!funcPtr) {
-        return nullptr;
-    }
-
+#endif
+    if (!funcPtr) return nullptr;
     return reinterpret_cast<LibFun::SharedLibFun>(funcPtr);
 }
+#ifdef _WIN32
+static std::string win32ErrorString(DWORD err) {
+    char* msg = nullptr;
+    FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+                   nullptr, err, 0, (LPSTR)&msg, 0, nullptr);
+    std::string result = msg ? msg : "Unknown error";
+    LocalFree(msg);
+    return result;
+}
+#endif

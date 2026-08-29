@@ -1,6 +1,10 @@
 #ifndef HXHLANG_SRC_HXVM_INTERPRETER_H
 #define HXHLANG_SRC_HXVM_INTERPRETER_H
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -1439,34 +1443,76 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
 #endif
             void* handle = nullptr;
             LibFun::SharedLibFun nativeFun = nullptr;
+            std::string libPath;
+            int libListSize = 0;
+            if (obj.isLibPacked)
+                libListSize = obj.sharedLibFileList.size();
+            else
+                libListSize = obj.constantPool.libNameList.size();
 #ifdef HX_DEBUG
-            wprintf(LOG_LABEL L"libNameListSize: %d\n", obj.constantPool.libNameList.size());
+            wprintf(LOG_LABEL L"libNameListSize: %d\n", libListSize);
 #endif
-            for (int i = 0; i < obj.constantPool.libNameList.size(); i++) {
-#ifdef HX_DEBUG
-                wprintf(LOG_LABEL L"i: %d\n", i);
-#endif
-                if (obj.constantPool.libNameList[i] == nullptr) continue;
-                std::filesystem::path objFileAbsoltePath = std::filesystem::absolute(objFilePath);
-                std::string libPath;
+            for (int i = 0; i < libListSize; i++) {
+                if (obj.isLibPacked) {
+                    if (obj.sharedLibFileList[i].asciiName == nullptr) continue;
+                } else {
+                    if (obj.constantPool.libNameList[i] == nullptr) continue;
+                }
+                if (!obj.isLibPacked) {
+                    std::filesystem::path objFileAbsoltePath = std::filesystem::absolute(objFilePath);
 #ifdef WIN32
-                libPath = objFileAbsoltePath.parent_path().string() + "\\" + obj.constantPool.libNameList[i];
+                    libPath = objFileAbsoltePath.parent_path().string() + "\\" + obj.constantPool.libNameList[i];
 #else
-                libPath = objFileAbsoltePath.parent_path().string() + "/" + obj.constantPool.libNameList[i];
+                    libPath = objFileAbsoltePath.parent_path().string() + "/" + obj.constantPool.libNameList[i];
 #endif
-
+                } else {
+                    if (isAndroidPlatform()) {
+                        libPath = getenv("HOME") + std::string("/HxlangTmpSharedLib/") + obj.sharedLibFileList[i].asciiName;
+                    } else {
+                        std::filesystem::path objFileAbsoltePath =
+                            std::filesystem::absolute(obj.sharedLibFileList[i].asciiName);
+#ifdef WIN32
+                        libPath = objFileAbsoltePath.parent_path().string() + "\\" + obj.sharedLibFileList[i].asciiName;
+#else
+                        libPath = objFileAbsoltePath.parent_path().string() + "/" + obj.sharedLibFileList[i].asciiName;
+#endif
+                    }
+                }
 #ifdef HX_DEBUG
                 wprintf(LOG_LABEL L"绝对路径：%s\n", libPath.c_str());
 #endif
-                handle = dlopen(libPath.c_str(), RTLD_LAZY);
+#ifdef _WIN32
+                handle = (void*)LoadLibraryA(libPath.c_str());
                 if (!handle) {
-                    fwprintf(errorStream, ERR_LABEL L"zako~你共享库文件放哪里了喵？\n");
+                    DWORD err = GetLastError();
+                    fwprintf(errorStream, ERR_LABEL L"LoadLibraryA(\"%hs\") 失败: %lu\n", libPath, err);
+                    continue;
                 }
+#else
+                handle = dlopen(libPath, RTLD_LAZY);
+                if (!handle) {
+                    fwprintf(errorStream, ERR_LABEL L"dlopen(\"%s\") 失败: %s\n", libPath, dlerror());
+                    continue;
+                }
+#endif
+
                 nativeFun = loadSharedLibFunction(handle, libFunName);
-                if (!nativeFun) continue;
+                if (!nativeFun) {
+#ifdef _WIN32
+                    FreeLibrary((HMODULE)handle);
+#else
+                    dlclose(handle);
+#endif
+                    handle = nullptr;
+                    continue;
+                }
             }
             if (!nativeFun) {
+                #ifdef _WIN32
+                fwprintf(errorStream, ERR_LABEL L"共享库被玩坏了喵\n  %s\n", win32ErrorString(GetLastError()).c_str());
+                #else
                 fwprintf(errorStream, ERR_LABEL L"共享库被玩坏了喵\n  dlerror(): %s\n", dlerror() ? dlerror() : "(null)");
+                #endif
                 return -1;
             }
             LibFun::SharedLibFunArg args;
@@ -1508,7 +1554,13 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
             _OpStack newOpVal = nativeFun(args);
             opStack.opStack[opStack.top] = newOpVal;
             opStack.top++;
-            dlclose(handle);
+            if (handle) {
+                #ifdef _WIN32
+                FreeLibrary((HMODULE)handle);
+                #else
+                dlclose(handle);
+                #endif
+            }
             break;
         }
         case OP_NOP: {

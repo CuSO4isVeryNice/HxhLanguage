@@ -10,11 +10,13 @@
 #include <stdio.h>
 #include <time.h>
 #include <wchar.h>
-
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 #include <cstdlib>
 #include <string>
 
-#include "GUIMenu/GUIMenu.h"
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -29,11 +31,46 @@ inline void hxFree(void* ptr) {
     free(ptr);
     ptr = nullptr;
 }
+std::string getDirectory(const std::string& path) {
+    size_t pos = path.find_last_of("/\\"); // 兼容 Windows 和 Linux
+    if (pos == std::string::npos) {
+        return "."; // 没有路径，使用当前目录
+    }
+    return path.substr(0, pos+1);
+}
 #include "Error.h"
 #include "Generator.h"
 #include "IR.h"
 #include "Lexer.h"
 #include "Scanner.h"
+
+typedef struct CompileFlag {
+    std::string outPath;
+    std::string sourcePath;
+    unsigned char printVersion;
+    unsigned char packSharedLib;
+} CompileFlag;
+
+int parseFlags(int argc, char* argv[], CompileFlag& flag) {
+    if (argc == 1) {
+        return  0;
+    } else {
+        if (!argv) return -1;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-version") == 0) {
+                flag.printVersion = (unsigned char)1;
+            } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0 || strcmp(argv[i], "-output") == 0) {
+                if (i+1 < argc) flag.outPath = argv[++i];
+                else return -1;
+            } else if (strcmp(argv[i], "-pack") == 0 || strcmp(argv[i], "--pack") == 0) {
+                flag.packSharedLib = (unsigned char)1;
+            } else {
+                flag.sourcePath = argv[i];
+            }
+        }
+    }
+    return  0;
+}
 
 int main(int argc, char* argv[]) {
     try {
@@ -47,28 +84,25 @@ int main(int argc, char* argv[]) {
         _setmode(_fileno(stdout), _O_U16TEXT);
         _setmode(_fileno(stderr), _O_U16TEXT);
 #endif
+
         std::string path = "";
         std::string objPath = "out.hxo";
+        unsigned char isPackSharedLibInObjFile = 0;
 #ifdef HX_DEBUG
         path = "../test/test.hxl";
         objPath = "../test/out.hxo";
 #else
-        if (argc == 1) {
-            int flag = drawGUIMenu(path, objPath);
-            if (flag == -1) return -1;
-            if (flag == 255) return 0;
+        CompileFlag flag = {};
+        if (parseFlags(argc, argv, flag)) {
+            fwprintf(errorStream, L"\33[31m[ERR]\33[0m解析编译参数时出错了喵～（X_X)绝对不是hxc的问题！绝对不是！\n");
         }
-        for (int i = 1; i < argc; i++) {
-            if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-                fwprintf(outputStream, L"\33[1;34m[INFO]\33[0m当时版本是 %f 喵~\n快来操作hxc喵\n", HXC_VERSION);
-                return 0;
-            } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
-                i++;
-                if (i < argc) objPath = argv[i];
-            } else {
-                path = argv[i];
-            }
+        path = flag.sourcePath;
+        objPath = flag.outPath;
+        if (flag.printVersion) {
+            fwprintf(outputStream, L"\33[1;34m[INFO]\33[0m hxc的版本是%.2f喵～\n", HXC_VERSION);
+            return 0;
         }
+        isPackSharedLibInObjFile = flag.packSharedLib;
 #endif
         // 读取源文件
         wchar_t* src = NULL;
@@ -96,7 +130,8 @@ int main(int argc, char* argv[]) {
             freeTokens(&tokens);
             fwprintf(outputStream, L"\33[31m[ERR]\33[0m编译失败。\n");
             return 255;
-        } else if (lexerError == -1) {
+        }
+        if (lexerError == -1) {
             fwprintf(errorStream, L"\33[31m[ERR]\33[0m内存分配失败！\n");
             freeTokens(&tokens);
             return -1;
@@ -116,7 +151,8 @@ int main(int argc, char* argv[]) {
             fwprintf(errorStream, L"%ls\n", errorMessageBuffer);
             fwprintf(outputStream, L"\33[31m[ERR]\33[0m编译失败。\n");
             return 255;
-        } else if (irError == -1) {
+        }
+        if (irError == -1) {
             fwprintf(errorStream, L"\33[31m[ERR]\33[0m内存分配失败！\n");
             return -1;
         }
@@ -129,12 +165,15 @@ int main(int argc, char* argv[]) {
         fwprintf(outputStream, L"\33[1;34m[INFO]\33[0m正在生成目标代码\n");
         int genError = 0;
         ObjectCode* objCode = generateObjectCode(program, &genError);
+        objCode->isLibPacked = isPackSharedLibInObjFile;
+
         if (genError == 255) {
             fwprintf(errorStream, L"%ls\n", errorMessageBuffer);
             freeIRProgram(&program);
             fwprintf(outputStream, L"\33[31m[ERR]\33[0m编译失败。\n");
             return 255;
-        } else if (genError == -1) {
+        }
+        if (genError == -1) {
             fwprintf(errorStream, L"\33[31m[ERR]\33[0m内存分配失败！\n");
             freeIRProgram(&program);
             return -1;
@@ -147,7 +186,13 @@ int main(int argc, char* argv[]) {
 #endif
 
         FILE* objFile = fopen(objPath.c_str(), "wb");
-        writeObjectCode(objFile, *objCode);
+        if(writeObjectCode(getDirectory(objPath), objFile, *objCode)) {
+            fwprintf(errorStream, L"\33[31m[ERR]\33[0m写入目标文件时出错了喵～（X_X)绝对不是hxc的问题！绝对不是！\n");
+            freeIRProgram(&program);
+            freeTokens(&tokens);
+            freeObjectCode(&objCode);
+            return -1;
+        }
         freeIRProgram(&program);
         freeTokens(&tokens);
         freeObjectCode(&objCode);

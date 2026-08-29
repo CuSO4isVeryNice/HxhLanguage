@@ -116,6 +116,12 @@ typedef struct ConstantPool {
     Constant* constants = NULL;
     std::vector<char*> libNameList;  // 所需动态库
 } ConstantPool;
+//---------------------------------------
+typedef struct SharedLibFile {
+    char* asciiName;  //指向常量池中的字符串
+    uint64_t size;
+    char* data;
+} SharedLibFile;
 //----------------------------------
 typedef struct ObjectCodeHeader {
     char magic[4];  // 魔数 "HXOC"
@@ -124,16 +130,59 @@ typedef struct ObjectCodeHeader {
 //--------------------------------------
 typedef struct ObjectCode {
     ObjectCodeHeader header;
+    unsigned char isLibPacked; //原生库是否已打包在文件中
 
     ConstantPool constantPool;
     uint32_t procedureSize = 0;
     std::vector<Procedure*> procedures;
     int32_t start = 0;  // 入口索引
+
+    std::vector<SharedLibFile> sharedLibFileList;
 } ObjectCode;
 //--------------------------------------
 // 写入目标代码
-extern int writeObjectCode(FILE* objFile, ObjectCode& obj) noexcept;
+extern int writeObjectCode(std::string sourcePath, FILE* objFile, ObjectCode& obj) noexcept;
+static int writeString(const char* str, FILE* file) noexcept;
+static int packSharedLib(std::string sourcePath, ObjectCode& obj) noexcept {
+    for (int i = 0; i < obj.constantPool.libNameList.size(); i++) {
+        const char* libName = obj.constantPool.libNameList.at(i);
+        FILE* libFile = fopen(std::string(sourcePath + libName).c_str(), "rb");
+        if (!libFile) {
+            fwprintf(errorStream, L"无法打开动态库文件：%s (%s)\n", libName, std::string(sourcePath + libName).c_str());
+            return -1;
+        }
+        fseek(libFile, 0, SEEK_END);
+        long size = ftell(libFile);
+        fseek(libFile, 0, SEEK_SET);
 
+        char* data = (char*)malloc(size);
+        if (!data) {
+            fclose(libFile);
+            return -1;
+        }
+        fread(data, 1, size, libFile);
+        fclose(libFile);
+
+        SharedLibFile sharedLib;
+        sharedLib.asciiName = (char*)libName;  // 直接指向常量池中的字符串
+        sharedLib.size = size;
+        sharedLib.data = data;
+
+        obj.sharedLibFileList.push_back(sharedLib);
+    }
+    return 0;
+};
+static int writePackedLib(std::string& sourcePath, SharedLibFile& lib,FILE* file) noexcept {
+#ifdef HX_DEBUG
+    log(L"打包动态库");
+#endif
+    if (writeString(lib.asciiName, file)) {
+        return -1;
+    }
+    if (fwrite(&lib.size, sizeof(uint64_t), 1, file) != 1) return -1;
+    if (fwrite(lib.data, lib.size, 1, file) != 1) return -1;
+    return 0;
+}
 static int writeHeader(FILE* file) noexcept {
 #ifdef HX_DEBUG
     log(L"写入文件头");
@@ -366,9 +415,14 @@ static int writeProcedure(Procedure& proc, FILE* file) noexcept {
     if (fwrite(&(proc.stackSize), sizeof(uint32_t), 1, file) != 1) return -1;
     return 0;
 }
-int writeObjectCode(FILE* objFile, ObjectCode& obj) noexcept {
+int writeObjectCode(std::string sourcePath, FILE* objFile, ObjectCode& obj) noexcept {
     if (!objFile) return -1;
+    if(obj.isLibPacked) {
+        if (packSharedLib(sourcePath, obj)) return -1;
+    }
     if (writeHeader(objFile)) return -1;
+    //isLibPacked
+    if (fwrite(&(obj.isLibPacked), sizeof(unsigned char), 1, objFile) != 1) return -1;
     // log(L"%p\n",&obj);
     //  写ConstantPoolSize
     if (fwrite(&(obj.constantPool.size), sizeof(uint32_t), 1, objFile) != 1) return -1;
@@ -383,14 +437,16 @@ int writeObjectCode(FILE* objFile, ObjectCode& obj) noexcept {
             if (writeString(obj.constantPool.constants[i].value.asciiString, objFile)) return -1;
         }
     }
-    // 写obj.constantPool.libNameList
-    uint32_t libNameListSize = (uint32_t)obj.constantPool.libNameList.size();
-    if (fwrite(&(libNameListSize), sizeof(uint32_t), 1, objFile) != 1) return -1;
-    for (int i = 0; i < obj.constantPool.libNameList.size(); i++) {
+    if (!obj.isLibPacked) {
+        // 写obj.constantPool.libNameList
+        uint32_t libNameListSize = (uint32_t)obj.constantPool.libNameList.size();
+        if (fwrite(&(libNameListSize), sizeof(uint32_t), 1, objFile) != 1) return -1;
+        for (int i = 0; i < obj.constantPool.libNameList.size(); i++) {
 #ifdef HX_DEBUG
-        log(L"写入库路径:%s", obj.constantPool.libNameList.at(i) ? obj.constantPool.libNameList.at(i) : "(null)");
+            log(L"写入库路径:%s", obj.constantPool.libNameList.at(i) ? obj.constantPool.libNameList.at(i) : "(null)");
 #endif
-        if (writeString(obj.constantPool.libNameList.at(i), objFile)) return -1;
+            if (writeString(obj.constantPool.libNameList.at(i), objFile)) return -1;
+        }
     }
     // ProcedureSize
     if (fwrite(&(obj.procedureSize), sizeof(uint32_t), 1, objFile) != 1) return -1;
@@ -403,6 +459,14 @@ int writeObjectCode(FILE* objFile, ObjectCode& obj) noexcept {
     }
     // 入口索引
     if (fwrite(&(obj.start), sizeof(uint32_t), 1, objFile) != 1) return -1;
+    // 写入打包的动态库
+    if (obj.isLibPacked) {
+        uint32_t sharedLibCount = (uint32_t)obj.sharedLibFileList.size();
+        if (fwrite(&(sharedLibCount), sizeof(uint32_t), 1, objFile) != 1) return -1;
+        for (int i = 0; i< obj.sharedLibFileList.size(); i++) {
+            if (writePackedLib(sourcePath, obj.sharedLibFileList.at(i), objFile)) return -1;
+        }
+    }
     fclose(objFile);
     return 0;
 }

@@ -94,6 +94,11 @@ else()
     add_executable(hxvm src/HXVM/Main.cpp) 
 endif()
 
+if(OBJECT_OS STREQUAL "WINDOWS")
+    target_link_options(hxc PRIVATE -static -static-libgcc -static-libstdc++)
+    target_link_options(hxvm PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
+
 if(HX_DEBUG STREQUAL "ON")
     set(HX_DEBUG_MACRO 1)
     add_compile_options(-Wall)

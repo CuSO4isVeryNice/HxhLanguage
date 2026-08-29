@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <wchar.h>
 
 #include <string>
@@ -108,6 +109,12 @@ typedef struct ConstantPool {
     Constant* constants;
     HxVector<char*> libNameList;  // 所需动态库
 } ConstantPool;
+//-----------------------------------
+typedef struct SharedLibFile {
+    char* asciiName;  // 指向常量池中的字符串
+    uint64_t size;
+    char* data;  // 在解释阶段实际上没啥用
+} SharedLibFile;
 //----------------------------------
 typedef struct ObjectCodeHeader {
     char magic[4];  // 魔数 "HXOC"
@@ -116,11 +123,41 @@ typedef struct ObjectCodeHeader {
 //--------------------------------------
 typedef struct ObjectCode {
     ObjectCodeHeader header;
+    unsigned char isLibPacked;
     ConstantPool constantPool;
     uint32_t procedureSize;
     HxVector<Procedure> procedures;
     int32_t start;  // 入口索引
+
+    HxVector<SharedLibFile> sharedLibFileList;
 } ObjectCode;
+
+// 平台检测函数
+static int isAndroidPlatform(void) {
+    // Android 环境通常设置 ANDROID_ROOT 环境变量
+    return getenv("ANDROID_ROOT") != NULL;
+}
+inline static char* readString(FILE* file);
+inline static SharedLibFile readPackedLib(FILE* file) {
+    SharedLibFile lib = {};
+    lib.asciiName = readString(file);
+    if (fread(&lib.size, sizeof(uint64_t), 1, file) != 1) {
+        fwprintf(errorStream, ERR_LABEL L"读动态库大小时发生错误！\n");
+        return lib;
+    }
+    lib.data = (char*)malloc(lib.size);
+    if (!lib.data) {
+        fwprintf(errorStream, ERR_LABEL L"分配动态库数据内存失败！\n");
+        return lib;
+    }
+    if (fread(lib.data, 1, lib.size, file) != lib.size) {
+        fwprintf(errorStream, ERR_LABEL L"读动态库数据时发生错误！\n");
+        free(lib.data);
+        lib.data = nullptr;
+        return lib;
+    }
+    return lib;
+}
 
 inline static wchar_t* readWstring(FILE* file) {
     uint32_t byteLen;
@@ -215,6 +252,13 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
         return -1;
     }
 
+    // isLibPacked
+    if (fread(&obj.isLibPacked, sizeof(unsigned char), 1, file) != 1) {
+        fwprintf(errorStream, ERR_LABEL L"读打包原生库标记时发生错误！\n");
+        fclose(file);
+        return -1;
+    }
+
     // 读取常量池
     if (fread(&(obj.constantPool.size), sizeof(uint32_t), 1, file) != 1) {
         fwprintf(errorStream, ERR_LABEL L"读常量池时发生错误！\n");
@@ -225,10 +269,11 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
     for (uint32_t i = 0; i < obj.constantPool.size; i++) {
         char typeChar;
         if (fread(&typeChar, sizeof(char), 1, file) != 1) {
-            fwprintf(errorStream, ERR_LABEL L"读常量池的typeChar时发生错误！\n");
+            fwprintf(errorStream, ERR_LABEL L"读常量池的type时发生错误！\n");
             fclose(file);
             return -1;
         }
+
         obj.constantPool.constants[i].type = (ConstantType)typeChar;
         if (obj.constantPool.constants[i].type == CONST_STRING) {
             // 将 u16 序列读入并转为 wchar_t*
@@ -243,21 +288,23 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
         }
     }
     // 读动态库路径
-    uint32_t libNameListSize = 0;
-    if (fread(&libNameListSize, sizeof(uint32_t), 1, file) != 1) {
-        fclose(file);
-        return -1;
-    }
+    if (!obj.isLibPacked) {
+        uint32_t libNameListSize = 0;
+        if (fread(&libNameListSize, sizeof(uint32_t), 1, file) != 1) {
+            fclose(file);
+            return -1;
+        }
 #ifdef HX_DEBUG
-    wprintf(LOG_LABEL L"libNameListSize: %u\n", libNameListSize);
+        wprintf(LOG_LABEL L"libNameListSize: %u\n", libNameListSize);
 #endif
-    for (int i = 0; i < libNameListSize; i++) {
-        char* libName = readString(file);
-        if (libName) obj.constantPool.libNameList.push_back(libName);
-    }
+        for (int i = 0; i < libNameListSize; i++) {
+            char* libName = readString(file);
+            if (libName) obj.constantPool.libNameList.push_back(libName);
+        }
 #ifdef HX_DEBUG
-    wprintf(LOG_LABEL L"libNameList.size(): %u\n", obj.constantPool.libNameList.size());
+        wprintf(LOG_LABEL L"libNameList.size(): %u\n", obj.constantPool.libNameList.size());
 #endif
+    }
     // 读取过程
     uint32_t procCount;
     if (fread(&procCount, sizeof(uint32_t), 1, file) != 1) {
@@ -290,6 +337,71 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
     if (fread(&(obj.start), sizeof(uint32_t), 1, file) != 1) {
         fclose(file);
         return -1;
+    }
+    if (obj.isLibPacked) {
+        uint32_t sharedLibCount = 0;
+        if (fread(&sharedLibCount, sizeof(uint32_t), 1, file) != 1) {
+            fclose(file);
+            return -1;
+        }
+        for (uint32_t i = 0; i < sharedLibCount; i++) {
+            SharedLibFile lib = readPackedLib(file);
+            // obj.sharedLibFileList.push_back(lib);
+            if (isAndroidPlatform()) {
+                // 必须是Termux环境
+                const char* homeDir = getenv("HOME");
+                if (!homeDir) {
+                    fwprintf(errorStream, ERR_LABEL L"无法获取HOME环境变量！\n");
+                    fclose(file);
+                    return -1;
+                }
+                char* tmpPath =
+                    (char*)calloc(strlen(homeDir) + strlen("/HxlangTmpSharedLib/") + strlen(lib.asciiName) + 2, sizeof(char));
+                strcpy(tmpPath, homeDir);
+                strcat(tmpPath, "/HxlangTmpSharedLib/");
+                #ifdef _WIN32
+                mkdir(tmpPath);
+                #else
+                mkdir(tmpPath, 0755);
+                #endif
+                strcat(tmpPath, lib.asciiName);
+                FILE* tmpFile = fopen(tmpPath, "wb");
+                if (!tmpFile) {
+                    fwprintf(errorStream, ERR_LABEL L"无法创建临时动态库文件：%s\n", tmpPath);
+                    free(tmpPath);
+                    fclose(file);
+                    return -1;
+                }
+                if (fwrite(lib.data, 1, lib.size, tmpFile) != lib.size) {
+                    fwprintf(errorStream, ERR_LABEL L"写入临时动态库文件失败：%s\n", tmpPath);
+                    free(tmpPath);
+                    fclose(tmpFile);
+                    fclose(file);
+                    return -1;
+                }
+                fclose(tmpFile);
+                free(lib.data);
+                lib.data = nullptr;
+                obj.sharedLibFileList.push_back(lib);
+            } else {
+                FILE* tmpFile = fopen(lib.asciiName, "wb");
+                if (!tmpFile) {
+                    fwprintf(errorStream, ERR_LABEL L"无法创建动态库文件：%s\n", lib.asciiName);
+                    fclose(file);
+                    return -1;
+                }
+                if (fwrite(lib.data, 1, lib.size, tmpFile) != lib.size) {
+                    fwprintf(errorStream, ERR_LABEL L"写入动态库文件失败：%s\n", lib.asciiName);
+                    fclose(tmpFile);
+                    fclose(file);
+                    return -1;
+                }
+                fclose(tmpFile);
+                free(lib.data);
+                lib.data = nullptr;
+                obj.sharedLibFileList.push_back(lib);
+            }
+        }
     }
     fclose(file);
     return 0;
