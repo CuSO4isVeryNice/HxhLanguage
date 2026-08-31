@@ -41,6 +41,7 @@ typedef enum ErrorType {
     ERR_CLASS_MEMBER_ACCESS,  // 类成员访问
     ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED,
     ERR_SYNX_LIB_REF,  // 引用动态库语法错误
+    ERR_SYNX_HEADER_REF, //引入头文件错误
 } ErrorType;
 void initLocale(void) noexcept {
     // 设置Locale
@@ -615,6 +616,14 @@ void setError(ErrorType e, int errorLine, const wchar_t* errCode) noexcept {
                      L"\33[31m[ERR]连引个动态库都能搞砸，杂鱼就是杂鱼喵～\33[0m在第%d行\n\33[36m[NOTE]\33[0m "
                      L"这么简单的都不会吗喵::= "
                      L"lib:库名|原生库：库名",
+                     errorLine);
+            break;
+        }
+        case ERR_SYNX_HEADER_REF: {
+            swprintf(errorMessageBuffer, ERROR_BUF_SIZE,
+                     L"\33[31m[ERR] 杂鱼~连引用头文件的语法都写错了，真丢人喵\33[0m在第%d行\n"
+                     L"\33[36m[NOTE]\33[0m 听好了喵！正确语法是::= "
+                     L"use:\"头文件路径\" | 引用：\"头文件路径\"\n",
                      errorLine);
             break;
         }

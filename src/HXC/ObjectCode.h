@@ -112,8 +112,7 @@ typedef struct Constant {
     } value;
 } Constant;
 typedef struct ConstantPool {
-    uint32_t size = 0;
-    Constant* constants = NULL;
+    std::vector<Constant> constants;
     std::vector<char*> libNameList;  // 所需动态库
 } ConstantPool;
 //---------------------------------------
@@ -425,9 +424,10 @@ int writeObjectCode(std::string sourcePath, FILE* objFile, ObjectCode& obj) noex
     if (fwrite(&(obj.isLibPacked), sizeof(unsigned char), 1, objFile) != 1) return -1;
     // log(L"%p\n",&obj);
     //  写ConstantPoolSize
-    if (fwrite(&(obj.constantPool.size), sizeof(uint32_t), 1, objFile) != 1) return -1;
+    uint32_t conListSize = (uint32_t) obj.constantPool.constants.size();
+    if (fwrite(&conListSize, sizeof(uint32_t), 1, objFile) != 1) return -1;
     // 写ConstantPool.constants
-    for (int i = 0; i < obj.constantPool.size; i++) {
+    for (int i = 0; i < conListSize; i++) {
         // 写tyoe
         char type = (char)(obj.constantPool.constants[i].type);
         if (fwrite(&(type), sizeof(char), 1, objFile) != 1) return -1;

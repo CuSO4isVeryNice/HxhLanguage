@@ -97,6 +97,7 @@ int main(int argc, char* argv[]) {
         std::string objPath = "out.hxo";
         unsigned char isPackSharedLibInObjFile = 0;
 #ifdef HX_DEBUG
+        isPackSharedLibInObjFile = 1;
         path = "../test/test.hxl";
         objPath = "../test/out.hxo";
 #else

@@ -312,8 +312,6 @@ ObjectCode* generateObjectCode(IR_Program* program, int* err) {
         *err = -1;
         return NULL;
     }
-    objCode->constantPool.size = 0;
-    objCode->constantPool.constants = NULL;
     objCode->procedureSize = 0;
     if (!objCode) {
         if (err) *err = -1;
@@ -1257,31 +1255,23 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
         if ((function->bodyTokens[index].type != TOK_VAL) || (function->bodyTokens[index].mark != STR)) return 0;
         Instruction newInst = {};
         newInst.opcode = OP_PRINT_STRING;
-
-        constantPool->constants = (Constant*)realloc(constantPool->constants, sizeof(Constant) * (constantPool->size + 1));
-        if (!constantPool->constants) {
-#ifdef HX_DEBUG
-            log("L1158");
-#endif
-            *err = -1;
-            return -1;
-        }
-        constantPool->constants[constantPool->size].type = CONST_STRING;
-        constantPool->constants[constantPool->size].value.stringValue =
+        Constant strConstant = {};
+        constantPool->constants.push_back(strConstant);
+        constantPool->constants.back().type = CONST_STRING;
+        constantPool->constants.back().value.stringValue =
             (wchar_t*)calloc(wcslen(function->bodyTokens[index].value) + 1, sizeof(wchar_t));
-        if (!constantPool->constants[constantPool->size].value.stringValue) {
+        if (!constantPool->constants.back().value.stringValue) {
 #ifdef HX_DEBUG
             log("L1167");
 #endif
             *err = -1;
             return -1;
         }
-        wcscpy(constantPool->constants[constantPool->size].value.stringValue, function->bodyTokens[index].value);
-        constantPool->constants[constantPool->size].size =
+        wcscpy(constantPool->constants.back().value.stringValue, function->bodyTokens[index].value);
+        constantPool->constants.back().size =
             (uint16_t)wcslen(function->bodyTokens[index].value) * sizeof(uint16_t);
-        constantPool->size += 1;
         newInst.params[0].type = PARAM_TYPE_INDEX;
-        uint32_t strIndex = constantPool->size - 1;
+        uint32_t strIndex = constantPool->constants.size() - 1;
         memcpy(newInst.params[0].value, &(strIndex), sizeof(uint32_t));
         newInst.params[0].size = sizeof(uint32_t);
 
@@ -3146,23 +3136,19 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
             newInst.params[0].size = sizeof(uint16_t);
         } else if (node->data.value.type.kind == IR_DT_STRING) {
             // 加入常量池
-            constantPool->constants = (Constant*)realloc(constantPool->constants, sizeof(Constant) * (constantPool->size + 1));
-            if (!constantPool->constants) {
-                *err = -1;
-                return;
-            }
-            constantPool->constants[constantPool->size].type = CONST_STRING;
-            constantPool->constants[constantPool->size].value.stringValue =
+            Constant strConst = {};
+            constantPool->constants.push_back(strConst);
+            constantPool->constants.back().type = CONST_STRING;
+            constantPool->constants.back().value.stringValue =
                 (wchar_t*)calloc(wcslen(node->data.value.val.s) + 1, sizeof(wchar_t));
-            if (!constantPool->constants[constantPool->size].value.stringValue) {
+            if (!constantPool->constants.back().value.stringValue) {
                 *err = -1;
                 return;
             }
-            wcscpy(constantPool->constants[constantPool->size].value.stringValue, node->data.value.val.s);
-            constantPool->constants[constantPool->size].size = (uint16_t)wcslen(node->data.value.val.s) * sizeof(uint16_t);
-            constantPool->size += 1;
+            wcscpy(constantPool->constants.back().value.stringValue, node->data.value.val.s);
+            constantPool->constants.back().size = (uint16_t)wcslen(node->data.value.val.s) * sizeof(uint16_t);
             newInst.params[0].type = PARAM_TYPE_INDEX;
-            uint32_t strIndex = constantPool->size - 1;
+            uint32_t strIndex = constantPool->constants.size() - 1;
             memcpy(newInst.params[0].value, &(strIndex), sizeof(uint32_t));
             newInst.params[0].size = sizeof(uint32_t);
         } else {
@@ -3280,16 +3266,9 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
                 newInst.params[1].size = sizeof(uint32_t);
             } else {
                 newInst.opcode = OP_CAL_NATIVE;
-                constantPool->size++;
-                void* orginBuffer = constantPool->constants;
-                constantPool->constants = (Constant*)realloc(constantPool->constants, (constantPool->size) * sizeof(Constant));
-                if (!(constantPool->constants)) {
-                    if (orginBuffer) free(orginBuffer);
-                    orginBuffer = nullptr;
-                    *err = -1;
-                    return;
-                }
-                uint32_t funNameIndex = constantPool->size - 1;
+                Constant funNameStrConst = {};
+                constantPool->constants.push_back(funNameStrConst);
+                uint32_t funNameIndex = constantPool->constants.size()-1;
                 constantPool->constants[funNameIndex].type = CONST_ASCII_STRING;
                 constantPool->constants[funNameIndex].size =
                     (std::wcstombs(nullptr, node->data.funCall.pitch->fun->name, 0)) * sizeof(char);
@@ -3720,13 +3699,9 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
             newInst.params[1].size = sizeof(uint32_t);
         } else {
             newInst.opcode = OP_CAL_NATIVE;
-            constantPool->size++;
-            constantPool->constants = (Constant*)realloc(constantPool->constants, (constantPool->size) * sizeof(Constant));
-            if (!(constantPool->constants)) {
-                *err = -1;
-                return;
-            }
-            uint32_t funNameIndex = constantPool->size - 1;
+            Constant funNameStrConst = {};
+            constantPool->constants.push_back(funNameStrConst);
+            uint32_t funNameIndex = constantPool->constants.size() - 1;
             constantPool->constants[funNameIndex].type = CONST_ASCII_STRING;
             constantPool->constants[funNameIndex].size =
                 (std::wcstombs(nullptr, node->data.funCall.pitch->fun->name, 0)) * sizeof(char);
@@ -3759,15 +3734,13 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
 extern void freeObjectCode(ObjectCode** obj) {
     if (!obj || !(*obj)) return;
     // 释放常量池
-    if ((*obj)->constantPool.constants) {
-        for (int i = 0; i < (*obj)->constantPool.size; i++) {
+    if ((*obj)->constantPool.constants.size() != 0) {
+        for (int i = 0; i < (*obj)->constantPool.constants.size(); i++) {
             if ((*obj)->constantPool.constants[i].value.stringValue) {
                 hxFree((*obj)->constantPool.constants[i].value.stringValue);
                 (*obj)->constantPool.constants[i].value.stringValue = NULL;
             }
         }
-        hxFree((*obj)->constantPool.constants);
-        (*obj)->constantPool.constants = NULL;
     }
     for (int i = 0; i < (*obj)->procedures.size(); i++) {
         if ((*obj)->procedures.at(i)) {

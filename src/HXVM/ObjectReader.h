@@ -357,6 +357,11 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
                 }
                 char* tmpPath =
                     (char*)calloc(strlen(homeDir) + strlen("/HxlangTmpSharedLib/") + strlen(lib.asciiName) + 2, sizeof(char));
+                if (!tmpPath) {
+                    free(tmpPath);
+                    fclose(file);
+                    return -1;
+                }
                 strcpy(tmpPath, homeDir);
                 strcat(tmpPath, "/HxlangTmpSharedLib/");
                 #ifdef _WIN32
@@ -379,12 +384,28 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
                     fclose(file);
                     return -1;
                 }
+                free(tmpPath);
+                tmpPath = NULL;
                 fclose(tmpFile);
                 free(lib.data);
                 lib.data = nullptr;
                 obj.sharedLibFileList.push_back(lib);
             } else {
-                FILE* tmpFile = fopen(lib.asciiName, "wb");
+#ifdef _WIN32
+                mkdir(".HxlangTmpSharedLib");
+#else
+                mkdir(".HxlangTmpSharedLib", 0755);
+#endif
+                char* tmpPath =
+                    (char*)calloc(strlen(".HxlangTmpSharedLib/") + strlen(lib.asciiName) + 2, sizeof(char));
+                if (!tmpPath) {
+                    free(tmpPath);
+                    fclose(file);
+                    return -1;
+                }
+                strcpy(tmpPath, ".HxlangTmpSharedLib/");
+                strcat(tmpPath, lib.asciiName);
+                FILE* tmpFile = fopen(tmpPath, "wb");
                 if (!tmpFile) {
                     fwprintf(errorStream, ERR_LABEL L"无法创建动态库文件：%s\n", lib.asciiName);
                     fclose(file);
@@ -396,6 +417,8 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
                     fclose(file);
                     return -1;
                 }
+                free(tmpPath);
+                tmpPath = NULL;
                 fclose(tmpFile);
                 free(lib.data);
                 lib.data = nullptr;

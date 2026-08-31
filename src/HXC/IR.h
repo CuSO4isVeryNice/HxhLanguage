@@ -44,7 +44,7 @@ void freeIRProgram(IR_Program** program);
 bool checkEachClass(IR_Class* cls, IR_Program* currentIRProgram, std::vector<IR_Class*> lastClasses);
 static int getClassSize(IR_Class* cls, IR_Program*);
 //----------------------------------------------------------------------------------------------
-IR_Program* generateIR(Tokens* tokens, int* err) {
+IR_Program* generateIR(Tokens* tokens, int* err, IR_Program* orginProgram = nullptr) {
     if (!tokens) {
         if (err) *err = -1;
         return NULL;
@@ -54,11 +54,14 @@ IR_Program* generateIR(Tokens* tokens, int* err) {
         setError(ERR_NO_MAIN, 0, NULL);
         return NULL;
     }
-    IR_Program* program = (IR_Program*)calloc(1, sizeof(IR_Program));
-    if (!program) {
-        if (err) *err = -1;
-        return NULL;
-    }
+    IR_Program* program = nullptr;
+    if (orginProgram == nullptr) {
+        program = (IR_Program*)calloc(1, sizeof(IR_Program));
+        if (!program) {
+            if (err) *err = -1;
+            return NULL;
+        }
+    } else program = orginProgram;
     int index = 0;
     while (index < tokens->count) {
         int old_index = index; /* 防护：记录进入循环时的索引，防止解析器未推进导致死循环
@@ -153,8 +156,34 @@ IR_Program* generateIR(Tokens* tokens, int* err) {
                         continue;
                     }
                 }
-            }
-            if (wcscmp(tokens->tokens[index].value, L"函数") == 0 || wcscmp(tokens->tokens[index].value, L"fun") == 0) {
+            } else if (wcscmp(tokens->tokens[index].value, L"use") == 0 || wcscmp(tokens->tokens[index].value, L"引用") == 0) {
+                if (index + 1 >= tokens->count) {
+                    setError(ERR_SYNX_HEADER_REF, tokens->tokens[index].line, nullptr);
+                    *err = 255;
+                    freeIRProgram(&program);
+                    return NULL;
+                }
+                index++;
+                if (tokens->tokens[index].type != TOK_OPR_COLON) {
+                    setError(ERR_SYNX_HEADER_REF, tokens->tokens[index].line, nullptr);
+                    *err = 255;
+                    freeIRProgram(&program);
+                    return NULL;
+                }
+                if (index + 1 >= tokens->count) {
+                    setError(ERR_SYNX_HEADER_REF, tokens->tokens[index].line, nullptr);
+                    *err = 255;
+                    freeIRProgram(&program);
+                    return NULL;
+                }
+                index++;
+                if (tokens->tokens[index].type != TOK_VAL && tokens->tokens[index].mark != STR) {
+                    setError(ERR_SYNX_HEADER_REF, tokens->tokens[index].line, nullptr);
+                    *err = 255;
+                    freeIRProgram(&program);
+                    return NULL;
+                }
+            } else if (wcscmp(tokens->tokens[index].value, L"函数") == 0 || wcscmp(tokens->tokens[index].value, L"fun") == 0) {
 #ifdef HX_DEBUG
                 log(L"解析到一个函数定义");
 #endif

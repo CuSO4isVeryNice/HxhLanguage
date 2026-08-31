@@ -1469,11 +1469,13 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                     if (isAndroidPlatform()) {
                         libPath = getenv("HOME") + std::string("/HxlangTmpSharedLib/") + obj.sharedLibFileList[i].asciiName;
                     } else {
-                        std::filesystem::path objFileAbsoltePath =
-                            std::filesystem::absolute(obj.sharedLibFileList[i].asciiName);
 #ifdef WIN32
+                        std::filesystem::path objFileAbsoltePath =
+                            std::filesystem::absolute(std::string(".HxlangTmpSharedLib\\")+obj.sharedLibFileList[i].asciiName);
                         libPath = objFileAbsoltePath.parent_path().string() + "\\" + obj.sharedLibFileList[i].asciiName;
 #else
+                        std::filesystem::path objFileAbsoltePath =
+                            std::filesystem::absolute(std::string(".HxlangTmpSharedLib/")+obj.sharedLibFileList[i].asciiName);
                         libPath = objFileAbsoltePath.parent_path().string() + "/" + obj.sharedLibFileList[i].asciiName;
 #endif
                     }
@@ -1491,7 +1493,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
 #else
                 handle = dlopen(libPath.c_str(), RTLD_LAZY);
                 if (!handle) {
-                    fwprintf(errorStream, ERR_LABEL L"dlopen(\"%s\") 失败: %s\n", libPath.c_str(), dlerror());
+                    //fwprintf(errorStream, ERR_LABEL L"dlopen(\"%s\") 失败: %s\n", libPath.c_str(), dlerror());
                     continue;
                 }
 #endif
