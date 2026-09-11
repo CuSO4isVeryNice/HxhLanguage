@@ -32,7 +32,7 @@ inline void hxFree(void* ptr) {
     ptr = nullptr;
 }
 std::string getDirectory(const std::string& path) {
-    size_t pos = path.find_last_of("/\\"); // 兼容 Windows 和 Linux
+    size_t pos = path.find_last_of("/\\");  // 兼容 Windows 和 Linux
     if (pos == std::string::npos) {
 #ifdef _WIN32
         return ".\\";
@@ -41,9 +41,9 @@ std::string getDirectory(const std::string& path) {
 #endif
     }
 #ifdef _WIN32
-    return path.substr(0, pos)+"\\";
+    return path.substr(0, pos) + "\\";
 #else
-    return path.substr(0, pos)+"/";
+    return path.substr(0, pos) + "/";
 #endif
 }
 #include "Error.h"
@@ -61,15 +61,17 @@ typedef struct CompileFlag {
 
 int parseFlags(int argc, char* argv[], CompileFlag& flag) {
     if (argc == 1) {
-        return  0;
+        return 0;
     } else {
         if (!argv) return -1;
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-version") == 0) {
                 flag.printVersion = (unsigned char)1;
             } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0 || strcmp(argv[i], "-output") == 0) {
-                if (i+1 < argc) flag.outPath = argv[++i];
-                else return -1;
+                if (i + 1 < argc)
+                    flag.outPath = argv[++i];
+                else
+                    return -1;
             } else if (strcmp(argv[i], "-pack") == 0 || strcmp(argv[i], "--pack") == 0) {
                 flag.packSharedLib = (unsigned char)1;
             } else {
@@ -77,7 +79,7 @@ int parseFlags(int argc, char* argv[], CompileFlag& flag) {
             }
         }
     }
-    return  0;
+    return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -195,7 +197,7 @@ int main(int argc, char* argv[]) {
 #endif
 
         FILE* objFile = fopen(objPath.c_str(), "wb");
-        if(writeObjectCode(getDirectory(objPath), objFile, *objCode)) {
+        if (writeObjectCode(getDirectory(objPath), objFile, *objCode)) {
             fwprintf(errorStream, L"\33[31m[ERR]\33[0m写入目标文件时出错了喵～（X_X)绝对不是hxc的问题！绝对不是！\n");
             freeIRProgram(&program);
             freeTokens(&tokens);

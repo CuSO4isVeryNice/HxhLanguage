@@ -1467,15 +1467,15 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
 #endif
                 } else {
                     if (isAndroidPlatform()) {
-                        libPath = getenv("HOME") + std::string("/HxlangTmpSharedLib/") + obj.sharedLibFileList[i].asciiName;
+                        libPath = getenv("HOME") + std::string("/.__HxlangTmpSharedLib/") + obj.sharedLibFileList[i].asciiName;
                     } else {
 #ifdef WIN32
-                        std::filesystem::path objFileAbsoltePath =
-                            std::filesystem::absolute(std::string(".HxlangTmpSharedLib\\")+obj.sharedLibFileList[i].asciiName);
+                        std::filesystem::path objFileAbsoltePath = std::filesystem::absolute(
+                            std::string(".HxlangTmpSharedLib\\") + obj.sharedLibFileList[i].asciiName);
                         libPath = objFileAbsoltePath.parent_path().string() + "\\" + obj.sharedLibFileList[i].asciiName;
 #else
                         std::filesystem::path objFileAbsoltePath =
-                            std::filesystem::absolute(std::string(".HxlangTmpSharedLib/")+obj.sharedLibFileList[i].asciiName);
+                            std::filesystem::absolute(std::string(".HxlangTmpSharedLib/") + obj.sharedLibFileList[i].asciiName);
                         libPath = objFileAbsoltePath.parent_path().string() + "/" + obj.sharedLibFileList[i].asciiName;
 #endif
                     }
@@ -1493,7 +1493,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
 #else
                 handle = dlopen(libPath.c_str(), RTLD_LAZY);
                 if (!handle) {
-                    //fwprintf(errorStream, ERR_LABEL L"dlopen(\"%s\") 失败: %s\n", libPath.c_str(), dlerror());
+                    // fwprintf(errorStream, ERR_LABEL L"dlopen(\"%s\") 失败: %s\n", libPath.c_str(), dlerror());
                     continue;
                 }
 #endif
@@ -1510,11 +1510,11 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                 }
             }
             if (!nativeFun) {
-                #ifdef _WIN32
+#ifdef _WIN32
                 fwprintf(errorStream, ERR_LABEL L"共享库被玩坏了喵\n  %s\n", win32ErrorString(GetLastError()).c_str());
-                #else
+#else
                 fwprintf(errorStream, ERR_LABEL L"共享库被玩坏了喵\n  dlerror(): %s\n", dlerror() ? dlerror() : "(null)");
-                #endif
+#endif
                 return -1;
             }
             LibFun::SharedLibFunArg args;
@@ -1557,11 +1557,11 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
             opStack.opStack[opStack.top] = newOpVal;
             opStack.top++;
             if (handle) {
-                #ifdef _WIN32
+#ifdef _WIN32
                 FreeLibrary((HMODULE)handle);
-                #else
+#else
                 dlclose(handle);
-                #endif
+#endif
             }
             break;
         }

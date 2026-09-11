@@ -40,8 +40,8 @@ typedef enum ErrorType {
     ERR_NO_VAR,
     ERR_CLASS_MEMBER_ACCESS,  // 类成员访问
     ERR_CLASS_MEMBER_ACCESS_NOT_SUPPORTED,
-    ERR_SYNX_LIB_REF,  // 引用动态库语法错误
-    ERR_SYNX_HEADER_REF, //引入头文件错误
+    ERR_SYNX_LIB_REF,     // 引用动态库语法错误
+    ERR_SYNX_HEADER_REF,  // 引入头文件错误
 } ErrorType;
 void initLocale(void) noexcept {
     // 设置Locale

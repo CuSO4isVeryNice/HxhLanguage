@@ -1268,8 +1268,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
             return -1;
         }
         wcscpy(constantPool->constants.back().value.stringValue, function->bodyTokens[index].value);
-        constantPool->constants.back().size =
-            (uint16_t)wcslen(function->bodyTokens[index].value) * sizeof(uint16_t);
+        constantPool->constants.back().size = (uint16_t)wcslen(function->bodyTokens[index].value) * sizeof(uint16_t);
         newInst.params[0].type = PARAM_TYPE_INDEX;
         uint32_t strIndex = constantPool->constants.size() - 1;
         memcpy(newInst.params[0].value, &(strIndex), sizeof(uint32_t));
@@ -3268,7 +3267,7 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
                 newInst.opcode = OP_CAL_NATIVE;
                 Constant funNameStrConst = {};
                 constantPool->constants.push_back(funNameStrConst);
-                uint32_t funNameIndex = constantPool->constants.size()-1;
+                uint32_t funNameIndex = constantPool->constants.size() - 1;
                 constantPool->constants[funNameIndex].type = CONST_ASCII_STRING;
                 constantPool->constants[funNameIndex].size =
                     (std::wcstombs(nullptr, node->data.funCall.pitch->fun->name, 0)) * sizeof(char);

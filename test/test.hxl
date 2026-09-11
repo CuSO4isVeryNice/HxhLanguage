@@ -1,6 +1,5 @@
-lib:"TestLib.so";
 lib:"TestLib.dll";
-lib:"TestLib_x86.so";
+lib:"TestLibAarch64.so";
 
 cls: Test {
     var:var1:int;

@@ -355,20 +355,20 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
                     fclose(file);
                     return -1;
                 }
-                char* tmpPath =
-                    (char*)calloc(strlen(homeDir) + strlen("/HxlangTmpSharedLib/") + strlen(lib.asciiName) + 2, sizeof(char));
+                char* tmpPath = (char*)calloc(strlen(homeDir) + strlen("/.__HxlangTmpSharedLib/") + strlen(lib.asciiName) + 2,
+                                              sizeof(char));
                 if (!tmpPath) {
                     free(tmpPath);
                     fclose(file);
                     return -1;
                 }
                 strcpy(tmpPath, homeDir);
-                strcat(tmpPath, "/HxlangTmpSharedLib/");
-                #ifdef _WIN32
+                strcat(tmpPath, "/.__HxlangTmpSharedLib/");
+#ifdef _WIN32
                 mkdir(tmpPath);
-                #else
+#else
                 mkdir(tmpPath, 0755);
-                #endif
+#endif
                 strcat(tmpPath, lib.asciiName);
                 FILE* tmpFile = fopen(tmpPath, "wb");
                 if (!tmpFile) {
@@ -396,8 +396,7 @@ inline int readObjectCode(FILE* file, ObjectCode& obj) {
 #else
                 mkdir(".HxlangTmpSharedLib", 0755);
 #endif
-                char* tmpPath =
-                    (char*)calloc(strlen(".HxlangTmpSharedLib/") + strlen(lib.asciiName) + 2, sizeof(char));
+                char* tmpPath = (char*)calloc(strlen(".HxlangTmpSharedLib/") + strlen(lib.asciiName) + 2, sizeof(char));
                 if (!tmpPath) {
                     free(tmpPath);
                     fclose(file);

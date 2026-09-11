@@ -1,8 +1,8 @@
 #pragma once
 #ifdef _WIN32
-    #include <windows.h>
+#include <windows.h>
 #else
-    #include <dlfcn.h>
+#include <dlfcn.h>
 #endif
 #include <stdint.h>
 #include <stdio.h>
@@ -65,8 +65,7 @@ LibFun::SharedLibFun loadSharedLibFunction(void* handle, const char* funcName) {
 #ifdef _WIN32
 static std::string win32ErrorString(DWORD err) {
     char* msg = nullptr;
-    FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                   nullptr, err, 0, (LPSTR)&msg, 0, nullptr);
+    FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, (LPSTR)&msg, 0, nullptr);
     std::string result = msg ? msg : "Unknown error";
     LocalFree(msg);
     return result;

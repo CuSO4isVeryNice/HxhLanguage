@@ -117,7 +117,7 @@ typedef struct ConstantPool {
 } ConstantPool;
 //---------------------------------------
 typedef struct SharedLibFile {
-    char* asciiName;  //指向常量池中的字符串
+    char* asciiName;  // 指向常量池中的字符串
     uint64_t size;
     char* data;
 } SharedLibFile;
@@ -129,7 +129,7 @@ typedef struct ObjectCodeHeader {
 //--------------------------------------
 typedef struct ObjectCode {
     ObjectCodeHeader header;
-    unsigned char isLibPacked; //原生库是否已打包在文件中
+    unsigned char isLibPacked;  // 原生库是否已打包在文件中
 
     ConstantPool constantPool;
     uint32_t procedureSize = 0;
@@ -171,7 +171,7 @@ static int packSharedLib(std::string sourcePath, ObjectCode& obj) noexcept {
     }
     return 0;
 };
-static int writePackedLib(std::string& sourcePath, SharedLibFile& lib,FILE* file) noexcept {
+static int writePackedLib(std::string& sourcePath, SharedLibFile& lib, FILE* file) noexcept {
 #ifdef HX_DEBUG
     log(L"打包动态库");
 #endif
@@ -416,15 +416,15 @@ static int writeProcedure(Procedure& proc, FILE* file) noexcept {
 }
 int writeObjectCode(std::string sourcePath, FILE* objFile, ObjectCode& obj) noexcept {
     if (!objFile) return -1;
-    if(obj.isLibPacked) {
+    if (obj.isLibPacked) {
         if (packSharedLib(sourcePath, obj)) return -1;
     }
     if (writeHeader(objFile)) return -1;
-    //isLibPacked
+    // isLibPacked
     if (fwrite(&(obj.isLibPacked), sizeof(unsigned char), 1, objFile) != 1) return -1;
     // log(L"%p\n",&obj);
     //  写ConstantPoolSize
-    uint32_t conListSize = (uint32_t) obj.constantPool.constants.size();
+    uint32_t conListSize = (uint32_t)obj.constantPool.constants.size();
     if (fwrite(&conListSize, sizeof(uint32_t), 1, objFile) != 1) return -1;
     // 写ConstantPool.constants
     for (int i = 0; i < conListSize; i++) {
@@ -463,7 +463,7 @@ int writeObjectCode(std::string sourcePath, FILE* objFile, ObjectCode& obj) noex
     if (obj.isLibPacked) {
         uint32_t sharedLibCount = (uint32_t)obj.sharedLibFileList.size();
         if (fwrite(&(sharedLibCount), sizeof(uint32_t), 1, objFile) != 1) return -1;
-        for (int i = 0; i< obj.sharedLibFileList.size(); i++) {
+        for (int i = 0; i < obj.sharedLibFileList.size(); i++) {
             if (writePackedLib(sourcePath, obj.sharedLibFileList.at(i), objFile)) return -1;
         }
     }

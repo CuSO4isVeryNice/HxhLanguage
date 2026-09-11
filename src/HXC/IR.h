@@ -32,7 +32,7 @@ IR_Class* parseClass(Tokens* tokens, int* index, int* err);
  * @param tokens 词法分析得到的Token流
  * @param err 错误码指针，发生错误时会设置为相应错误码
  */
-IR_Program* generateIR(Tokens* tokens, int* err);  // 生成中间表示
+IR_Program* generateIR(Tokens* tokens, int* err, IR_Program* orginProgram);  // 生成中间表示
 /** 解析全局或类中的变量定义(不能赋初值)
  * @param tokens 词法分析得到的Token流
  * @param index 当前解析到的Token索引，解析完成后会更新为下一个未解析的Token索引
@@ -61,7 +61,8 @@ IR_Program* generateIR(Tokens* tokens, int* err, IR_Program* orginProgram = null
             if (err) *err = -1;
             return NULL;
         }
-    } else program = orginProgram;
+    } else
+        program = orginProgram;
     int index = 0;
     while (index < tokens->count) {
         int old_index = index; /* 防护：记录进入循环时的索引，防止解析器未推进导致死循环
