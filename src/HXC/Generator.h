@@ -135,9 +135,9 @@ static void listObjectCode_Proc(Procedure* proc, ObjectCode& obj) {
                 void* funNameIndex = ins.params[0].value;
                 fwprintf(logStream,
                          L"\t%03u: \33[1;34mOP_CAL_NATIVE\33[0m "
-                         L"%s(funName), %u(paramCount)\n",
+                         L"%s(funName), %u(paramCount) %d(isRetVoid)\n",
                          i, obj.constantPool.constants[*((int*)funNameIndex)].value.asciiString,
-                         *((uint32_t*)ins.params[1].value));
+                         *((uint32_t*)ins.params[1].value), (int)*((char*)ins.params[2].value));
                 break;
             }
             case OP_RET:
@@ -3286,6 +3286,18 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
                 newInst.params[1].type = PARAM_TYPE_INT;
                 memcpy(newInst.params[1].value, &(node->data.funCall.arg_count), sizeof(uint32_t));
                 newInst.params[1].size = sizeof(uint32_t);
+
+                if (funMem->irFun->returnType.kind == IR_DT_VOID) {
+                    char isRetTypeVoid = 1;
+                    newInst.params[2].type = PARAM_TYPE_BOOL;
+                    memcpy(newInst.params[2].value, &(isRetTypeVoid), sizeof(char));
+                    newInst.params[2].size = sizeof(char);
+                } else {
+                    char isRetTypeVoid = 0;
+                    newInst.params[2].type = PARAM_TYPE_BOOL;
+                    memcpy(newInst.params[2].value, &(isRetTypeVoid), sizeof(char));
+                    newInst.params[2].size = sizeof(char);
+                }
             }
             (*inst_index)++;
         } else if (right->kind == NODE_VAR) {
@@ -3720,6 +3732,18 @@ void generateInstructionsFromAST(std::vector<Instruction>& instructions, int* in
             newInst.params[1].type = PARAM_TYPE_INT;
             memcpy(newInst.params[1].value, &(node->data.funCall.arg_count), sizeof(uint32_t));
             newInst.params[1].size = sizeof(uint32_t);
+
+            if (node->data.funCall.pitch->fun->returnType.kind == IR_DT_VOID) {
+                char isRetTypeVoid = 1;
+                newInst.params[2].type = PARAM_TYPE_BOOL;
+                memcpy(newInst.params[2].value, &(isRetTypeVoid), sizeof(char));
+                newInst.params[2].size = sizeof(char);
+            } else {
+                char isRetTypeVoid = 0;
+                newInst.params[2].type = PARAM_TYPE_BOOL;
+                memcpy(newInst.params[2].value, &(isRetTypeVoid), sizeof(char));
+                newInst.params[2].size = sizeof(char);
+            }
         }
         (*inst_index)++;
     } else {

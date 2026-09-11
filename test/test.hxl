@@ -15,6 +15,7 @@ cls: SubTest {
 }
 
 lib:fun:libFunTest():int;
+lib:fun:printI32Value(num:int):void;
 
 函数：主函数（无参数）->{
     __hx_write_string__ "---------------------------------------------\n";
@@ -25,5 +26,6 @@ lib:fun:libFunTest():int;
     
     var:newVar:Test;
     newVar:fun1();
+    printI32Value(114);
     ret：0。
 }

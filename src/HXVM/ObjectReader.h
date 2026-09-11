@@ -58,14 +58,14 @@ enum {
     OP_STRING_CONCAT,
 
     OP_HEAP_ALLOC,  // OP_HEAP_ALLOC size(u32)：分配内存的地址放栈顶
-    OP_CAL_NATIVE,  // OP_CAL_NATIVE funName(常量池索引，u32) argCount(u32)
+    OP_CAL_NATIVE,  // OP_CAL_NATIVE funName(常量池索引，u32) argCount(u32), 标记是否返回void(bool 1字节)
 };
 typedef uint8_t ParamType;
 enum {
     PARAM_TYPE_INT = 0,
     PARAM_TYPE_FLOAT,  // double
     PARAM_TYPE_CHAR,
-    PARAM_TYPE_BOOL,
+    PARAM_TYPE_BOOL,  // 1字节
     PARAM_TYPE_STRING,
     PARAM_TYPE_ADDRESS,
     PARAM_TYPE_INDEX,   // uint32_t 索引常量池或过程表

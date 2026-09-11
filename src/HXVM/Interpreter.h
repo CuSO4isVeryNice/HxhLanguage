@@ -1553,9 +1553,16 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
             }
             opStack.top -= argCount;  // 弹出参数
 
+            char isRetVoid = 0;
+            memcpy(&isRetVoid, &(inst.params[2].value), sizeof(char));
+
             _OpStack newOpVal = nativeFun(args);
-            opStack.opStack[opStack.top] = newOpVal;
-            opStack.top++;
+
+            if (!isRetVoid) {
+                opStack.opStack[opStack.top] = newOpVal;
+                opStack.top++;
+            }
+
             if (handle) {
 #ifdef _WIN32
                 FreeLibrary((HMODULE)handle);

@@ -53,4 +53,12 @@ _OpStack libFunTest(SharedLibFunArg args) {
     retVal.type = TYPE_INT;
     return retVal;
 }
+_OpStack printI32Value(SharedLibFunArg args) {
+    fwprintf(stdout, L"argsListSize: %d\n", args.args.size());
+    if (args.args.size() >= 1) {
+        fwprintf(stdout, L"i32Value:%d\n", args.args.at(0).value.i32Value);
+    }
+    _OpStack retVal;
+    return retVal;
+}
 }
