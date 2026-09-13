@@ -138,14 +138,18 @@ Tokens* lex(wchar_t* src, int* err) noexcept {
 #endif
         }
         tokens->tokens[token_index].mark = -1;
-        if (src[index_src] == L'\n') line++;
+        if (src[index_src] == L'\n') {
+            line++;
+        }
         if (iswspace(src[index_src])) continue;
         if (src[index_src] == L'\'' || src[index_src] == L'‘' || src[index_src] == L'’') {  // 字符
             int start_index = index_src;
             int end_index = 0;
             while (index_src < length_src) {
                 index_src++;
-                if (src[index_src] == L'\n') line++;
+                if (src[index_src] == L'\n') {
+                    line++;
+                }
                 if (src[index_src] == L'\\') {
                     if (index_src + 1 >= length_src) {
                         wchar_t errCode[3] = {0};
@@ -190,7 +194,9 @@ Tokens* lex(wchar_t* src, int* err) noexcept {
             int end_index = 0;
             while (index_src < length_src) {
                 index_src++;
-                if (src[index_src] == L'\n') line++;
+                if (src[index_src] == L'\n') {
+                    line++;
+                }
                 if (src[index_src] == L'\\') {
                     if (index_src + 1 >= length_src) {
                         wchar_t errCode[3] = {0};

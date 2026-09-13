@@ -155,7 +155,7 @@ extern void printAST(ASTNode* root) {
 // 根节点。
 extern ASTNode* parseExpression(Token* exp, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
                                 std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
-                                int* err) noexcept;
+                                int* err, bool isParsingFunArgs) noexcept;
 
 // 递归释放 AST 节点及其子节点，node 为待释放的根节点，返回 void。
 void freeAST(ASTNode* node) noexcept {
@@ -190,17 +190,17 @@ static int getPrec(HxTokenType t) {  // 优先级
 // 为错误码输出，返回解析得到的 AST 节点。
 static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
                              std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
-                             int* err) noexcept;
+                             int* err, bool isParsingFunArgs) noexcept;
 // 递归解析带优先级的表达式，tokens 为 token 数组，index 为当前解析位置，size 为 token 数量，pitchTable 为函数调用匹配表，table
 // 为当前符号表，outsideTable 为外层作用域符号表，localeScopeIndex 为当前作用域索引，err 为错误码输出，min_prec
 // 为当前最小优先级，返回解析得到的 AST 节点。
 static ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
                              std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
-                             int* err, int min_prec) noexcept;
+                             int* err, int min_prec, bool isParsingFunArgs) noexcept;
 static ASTNode* parseAfterID(ASTNode* lastNodes, Token* tokens, int* index, int size, FunCallPitchTable& pitchTable,
                              SymbolTable* table, std::vector<SymbolTable>& outsideTable, int localeScopeIndex,
                              wchar_t* fromClass, std::vector<IR_Class*> classTable, int* err, bool isMemberAccessRight = false,
-                             bool allowParseColon = true) {
+                             bool allowParseColon = true, bool isParsingFunArgs = false) noexcept {
 #ifdef HX_DEBUG
     log(L"------调用函数parseAfterID------");
     log(L"  调用函数parseAfterID---> fromClass = %ls", fromClass ? fromClass : L"(null)");
@@ -271,332 +271,100 @@ AFTER_COLON:
             (*index)++;
             return node;
         }
-        if (*index < size - 1) {
-            Token* next = &tokens[*index + 1];
-            if (next->type == TOK_OPR_LBRACKET) {  // 数组访问
-                if (isFromClass) {
-                    if (!varMem) {
-                        setError(ERR_CANNOT_FIND_SYMBOL, node->token->line, node->data.var.name);
-                        *err = 255;
-                        return NULL;
-                    }
-                    node->resultType = varMem->irVar->type;
-                    node->data.var.type = varMem->irVar->type;
-                }
-                // 解析数组访问
-                ASTNode* arrayAccessNode = (ASTNode*)calloc(1, sizeof(ASTNode));
-                if (!arrayAccessNode) {
-                    *err = -1;
-                    return NULL;
-                }
-                arrayAccessNode->kind = NODE_VAR;
-                arrayAccessNode->data.var.name = wcsdup(curr->value);
-                arrayAccessNode->data.var.index = symIdx;
-                arrayAccessNode->arrayAccessIndex = NULL;
-                (*index)++;  // 跳过变量名
-                (*index)++;  // 跳过左括号
-                int exprStartIndex = *index;
-                int openBrackets = 1;
-                int closeBrackets = 0;
-                while (*index < size && (openBrackets != closeBrackets)) {
-                    if (tokens[*index].type == TOK_OPR_LBRACKET) {
-                        openBrackets++;
-                    } else if (tokens[*index].type == TOK_OPR_RBRACKET) {
-                        closeBrackets++;
-                    }
-                    (*index)++;
-                }
-                if (openBrackets != closeBrackets) {
-                    setError(ERR_EXP, curr->line, curr->value);  // 缺少右括号
+
+        if (next->type == TOK_OPR_LBRACKET) {  // 数组访问
+            if (isFromClass) {
+                if (!varMem) {
+                    setError(ERR_CANNOT_FIND_SYMBOL, node->token->line, node->data.var.name);
                     *err = 255;
-                    hxFree(arrayAccessNode);
                     return NULL;
                 }
-                switch (node->resultType.kind) {  // 决定结果类型
-                    case IR_DT_INT:
-                    case IR_DT_FLOAT:
-                    case IR_DT_CHAR:
-                    case IR_DT_STRING:
-                    case IR_DT_VOID:
-                    case IR_DT_CUSTOM:
-                    case IR_DT_BOOL:
-                        setError(ERR_EXP, curr->line, curr->value);
-                        hxFree(arrayAccessNode);
-                        *err = 255;
-                        return NULL;
-                        break;
-                    default:
-                        if (node->resultType.kind == IR_DT_INT_ARR)
-                            node->resultType.kind = IR_DT_INT;
-                        else if (node->resultType.kind == IR_DT_FLOAT_ARR)
-                            node->resultType.kind = IR_DT_FLOAT;
-                        else if (node->resultType.kind == IR_DT_CHAR_ARR)
-                            node->resultType.kind = IR_DT_CHAR;
-                        else if (node->resultType.kind == IR_DT_STRING_ARR)
-                            node->resultType.kind = IR_DT_STRING;
-                        else if (node->resultType.kind == IR_DT_BOOL_ARR)
-                            node->resultType.kind = IR_DT_BOOL;
-                        else if (node->resultType.kind == IR_DT_CUSTOM_ARR)
-                            node->resultType.kind = IR_DT_CUSTOM;
-                        break;
-                }
-
-                // 解析索引表达式
-                ASTNode* indexExpr = parseExprRec(tokens, &exprStartIndex, *index, pitchTable, table, outsideTable,
-                                                  localeScopeIndex, classTable, err, 0);
-                if (*err != 0 || !indexExpr) {
-                    hxFree(arrayAccessNode);
-                    return NULL;
-                }
-                if (indexExpr->resultType.kind != IR_DT_INT && indexExpr->resultType.kind != IR_DT_CHAR &&
-                    indexExpr->resultType.kind != IR_DT_BOOL && indexExpr->resultType.kind != IR_DT_FLOAT) {
-                    setError(ERR_EXP, curr->line, curr->value);  // 索引表达式必须是整数类型
-                    *err = 255;
-                    hxFree(arrayAccessNode);
-                    freeAST(indexExpr);
-                    return NULL;
-                }
-
-                arrayAccessNode->arrayAccessIndex = indexExpr;
-
-                if (*index >= size) {
-                    setError(ERR_NO_END, curr->line, NULL);
-                    *err = 255;
-                    hxFree(arrayAccessNode);
-                    return NULL;
-                }
-                if (tokens[*index].type == TOK_OPR_SET) {  // sym[val] = exp
-                    if (*index + 1 >= size) {
-                        setError(ERR_EXP, curr->line, curr->value);
-                        *err = 255;
-                        return NULL;
-                    }
-                    (*index)++;  // tokens[*index] == 等号右边
-                    ASTNode* movNode = (ASTNode*)calloc(1, sizeof(ASTNode));
-                    if (!movNode) {
-                        *err = -1;
-                        return NULL;
-                    }
-
-                    movNode->kind = NODE_BINARY;
-                    movNode->data.binary.op = BIN_OPR_SET;
-                    movNode->data.binary.varName = wcsdup(curr->value);
-
-                    movNode->left = arrayAccessNode;  // 左边是数组访问节点
-                    // 连等支持
-                    movNode->right = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex,
-                                                  classTable, err, getPrec(TOK_OPR_SET));
-
-                    if (*err) {
-                        hxFree(movNode);
-                        return NULL;
-                    }
-                    // 类型推导
-                    movNode->resultType = movNode->right->resultType;
-                    return movNode;
-                }
-
-                return arrayAccessNode;
+                node->resultType = varMem->irVar->type;
+                node->data.var.type = varMem->irVar->type;
             }
-            // 函数调用
-            if (next->type == TOK_OPR_LQUOTE) {  // id({exp,})
-                if (*index + 2 >= size) {
+            // 解析数组访问
+            ASTNode* arrayAccessNode = (ASTNode*)calloc(1, sizeof(ASTNode));
+            if (!arrayAccessNode) {
+                *err = -1;
+                return NULL;
+            }
+            arrayAccessNode->kind = NODE_VAR;
+            arrayAccessNode->data.var.name = wcsdup(curr->value);
+            arrayAccessNode->data.var.index = symIdx;
+            arrayAccessNode->arrayAccessIndex = NULL;
+            (*index)++;  // 跳过变量名
+            (*index)++;  // 跳过左括号
+            int exprStartIndex = *index;
+            int openBrackets = 1;
+            int closeBrackets = 0;
+            while (*index < size && (openBrackets != closeBrackets)) {
+                if (tokens[*index].type == TOK_OPR_LBRACKET) {
+                    openBrackets++;
+                } else if (tokens[*index].type == TOK_OPR_RBRACKET) {
+                    closeBrackets++;
+                }
+                (*index)++;
+            }
+            if (openBrackets != closeBrackets) {
+                setError(ERR_EXP, curr->line, curr->value);  // 缺少右括号
+                *err = 255;
+                hxFree(arrayAccessNode);
+                return NULL;
+            }
+            switch (node->resultType.kind) {  // 决定结果类型
+                case IR_DT_INT:
+                case IR_DT_FLOAT:
+                case IR_DT_CHAR:
+                case IR_DT_STRING:
+                case IR_DT_VOID:
+                case IR_DT_CUSTOM:
+                case IR_DT_BOOL:
                     setError(ERR_EXP, curr->line, curr->value);
+                    hxFree(arrayAccessNode);
                     *err = 255;
                     return NULL;
-                }
-                ASTNode* funCallNode = (ASTNode*)calloc(1, sizeof(ASTNode));
-                if (!funCallNode) {
-                    *err = -1;
-                    return NULL;
-                }
-                funCallNode->kind = NODE_FUN_CALL;
-                funCallNode->data.funCall.name = wcsdup(curr->value);
-                int n = *index + 2;
-                // 解析参数
-                int argIndex = n;
-                funCallNode->data.funCall.args = (ASTNode**)calloc(1, sizeof(ASTNode*));
-                funCallNode->data.funCall.arg_count = 0;
-
-                while (argIndex < size && tokens[argIndex].type != TOK_OPR_RQUOTE) {
-                    if (tokens[argIndex].type == TOK_OPR_COMMA) {
-                        argIndex++;
-                        continue;
-                    }
-#ifdef HX_DEBUG
-                    log(L"分析实参");
-#endif
-                    int quoteCount = 0;
-                    int tempIndex = argIndex;
-                    // 正确处理括号嵌套并找到参数边界喵
-                    while (tempIndex < size) {
-                        if (tokens[tempIndex].type == TOK_OPR_LQUOTE) {
-                            quoteCount++;
-                        } else if (tokens[tempIndex].type == TOK_OPR_RQUOTE) {
-                            if (quoteCount == 0) break;  // 找到当前实参的结束边界
-                            quoteCount--;
-                        } else if (tokens[tempIndex].type == TOK_OPR_COMMA) {
-                            if (quoteCount == 0) break;  // 找到当前实参的逗号分隔符
-                        }
-                        tempIndex++;
-                    }
-
-                    ASTNode* arg = parseExpression(tokens, &argIndex, tempIndex, pitchTable, table, outsideTable,
-                                                   localeScopeIndex, classTable, err);
-                    if (*err != 0) {
-                        freeAST(funCallNode);
-                        return NULL;
-                    }
-
-                    funCallNode->data.funCall.args = (ASTNode**)realloc(
-                        funCallNode->data.funCall.args, sizeof(ASTNode*) * (funCallNode->data.funCall.arg_count + 1));
-                    funCallNode->data.funCall.args[funCallNode->data.funCall.arg_count] = arg;
-                    funCallNode->data.funCall.arg_count++;
-                    // parseExpression 会执行 (*index)--
-                    // 必须手动把它往前推一格
-                    argIndex++;
-                }
-                if (tokens[argIndex].type != TOK_OPR_RQUOTE) {
-                    setError(ERR_EXP, curr->line,
-                             curr->value);  // 报错：期待表达式
-                    *err = 255;
-                    freeAST(funCallNode);
-                    return NULL;
-                }
-                *index = argIndex + 1;
-                funCallNode->token = curr;
-                funCallNode->resultType.kind = IR_DT_VOID;  // 默认void
-#ifdef HX_DEBUG
-                log(L"获取函数索引和返回值类型(table->fun.size()=%d)", table->fun.size());
-#endif
-                // 获取函数索引和返回值类型
-                if (fromClass == NULL) {
-                    if (table->fun.size() > 0) {
-                        for (uint32_t i = 0; i < table->fun.size(); i++) {
-#ifdef HX_DEBUG
-                            log(L"获取函数索引和返回值类型->遍历到：%ls", table->fun[i]->name);
-#endif
-                            // 名字
-                            IR_Function* f = table->fun[i];
-                            if (!f) continue;
-                            if (wcscmp(f->name, funCallNode->data.funCall.name) == 0) {
-                                // 参数个数
-                                if (f->paramCount != funCallNode->data.funCall.arg_count) {
-                                    continue;
-                                }
-                                bool match = true;
-                                for (int j = 0; j < funCallNode->data.funCall.arg_count; j++) {
-                                    if (funCallNode->data.funCall.args[j]->resultType.kind != f->params[j].type.kind) {
-                                        match = false;
-                                        break;
-                                    }
-                                    if (funCallNode->data.funCall.args[j]->resultType.kind == IR_DT_CUSTOM) {
-                                        if (wcscmp(funCallNode->data.funCall.args[j]->resultType.customTypeName,
-                                                   f->params[j].type.customTypeName) != 0) {
-                                            match = false;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (match) {
-                                    // f->isUsed =
-                                    // true;
-                                    funCallNode->data.funCall.pitch = pitchTable.enter(f);
-                                    funCallNode->data.funCall.pitch->fun = f;
-                                    f->pitch = funCallNode->data.funCall.pitch;
-                                    funCallNode->data.funCall.ret_type = f->returnType;
-                                    funCallNode->resultType = f->returnType;
-#ifdef HX_DEBUG
-                                    log(L"找到函数%ls, 索引：%d", f->name, (int)i);
-#endif
-                                    return funCallNode;
-                                }
-                            }
-                        }
-                        setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
-                        *err = 255;
-                        return NULL;
-                    }
-                } else {
-                    IR_Class* fromClassPtr = nullptr;
-                    for (int i = 0; i < classTable.size(); i++) {
-                        if (wcscmp(classTable[i]->name, fromClass) == 0) {
-                            fromClassPtr = classTable[i];
-                            break;
-                        }
-                    }
-                    if (!fromClassPtr) {
-                        setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, fromClass);
-                        *err = 255;
-                        return NULL;
-                    }
-
-                    // 构造临时 IR_Function 用于查找匹配的成员函数
-                    IR_Function tempFun = {};
-                    tempFun.name = funCallNode->data.funCall.name;
-                    tempFun.paramCount = funCallNode->data.funCall.arg_count;
-                    tempFun.params = (IR_FunctionParam*)calloc(tempFun.paramCount, sizeof(IR_FunctionParam));
-                    if (!tempFun.params) {
-                        *err = -1;
-                        return NULL;
-                    }
-                    for (uint32_t i = 0; i < tempFun.paramCount; i++) {
-                        tempFun.params[i].type = funCallNode->data.funCall.args[i]->resultType;
-                    }
-
-                    PackedClassFunMem* packed = findFunInClass(tempFun, fromClassPtr, classTable);
-                    hxFree(tempFun.params);  // 释放临时参数数组
-
-                    if (packed == nullptr) {
-                        setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
-                        *err = 255;
-                        return NULL;
-                    }
-
-                    funCallNode->data.funCall.pitch = pitchTable.enter(packed->irFun);
-                    funCallNode->data.funCall.ret_type = packed->irFun->returnType;
-                    funCallNode->resultType = packed->irFun->returnType;
-                    delete packed;  // 释放包装对象，irFun 仍有效
-
-                    return funCallNode;
-                }
-                return funCallNode;
+                    break;
+                default:
+                    if (node->resultType.kind == IR_DT_INT_ARR)
+                        node->resultType.kind = IR_DT_INT;
+                    else if (node->resultType.kind == IR_DT_FLOAT_ARR)
+                        node->resultType.kind = IR_DT_FLOAT;
+                    else if (node->resultType.kind == IR_DT_CHAR_ARR)
+                        node->resultType.kind = IR_DT_CHAR;
+                    else if (node->resultType.kind == IR_DT_STRING_ARR)
+                        node->resultType.kind = IR_DT_STRING;
+                    else if (node->resultType.kind == IR_DT_BOOL_ARR)
+                        node->resultType.kind = IR_DT_BOOL;
+                    else if (node->resultType.kind == IR_DT_CUSTOM_ARR)
+                        node->resultType.kind = IR_DT_CUSTOM;
+                    break;
             }
-            // 赋值
-            else if (next->type == TOK_OPR_SET) {
-#ifdef HX_DEBUG
-                log(L"L568+ 处理赋值");
-#endif
-                if (isMemberAccessRight) {
-                    (*index)++;
-                    return node;
-                }
-                // 合法的左值：NODE_VAR 或 NODE_BINARY 且 op 为 BIN_OPR_CLASS_MEMBER_ACCESS（或数组访问）
-                bool isValidLeft = false;
-                if (node->kind == NODE_VAR) {
-                    isValidLeft = true;
-                } else if (node->left && node->kind == NODE_BINARY && node->data.binary.op == BIN_OPR_CLASS_MEMBER_ACCESS) {
-                    isValidLeft = true;
-                }
-                if (!isValidLeft) {
-#ifdef HX_DEBUG
-                    log(L"L580+赋值 -> 非法的左值");
-#endif
-                    *err = 255;
-                    setError(ERR_EXP, node->token->line, NULL);
-                    return NULL;
-                }
 
-                if (!isFromClass && symIdx == -1) {
-                    setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
-#ifdef HX_DEBUG
-                    log(L"L580+赋值 -> 找不到符号");
-#endif
-                    *err = 255;
-                    freeAST(node);
-                    return NULL;
-                }
-                (*index)++;  // tokens[*index] == next == SET
+            // 解析索引表达式
+            ASTNode* indexExpr = parseExprRec(tokens, &exprStartIndex, *index, pitchTable, table, outsideTable,
+                                              localeScopeIndex, classTable, err, 0, isParsingFunArgs);
+            if (*err != 0 || !indexExpr) {
+                hxFree(arrayAccessNode);
+                return NULL;
+            }
+            if (indexExpr->resultType.kind != IR_DT_INT && indexExpr->resultType.kind != IR_DT_CHAR &&
+                indexExpr->resultType.kind != IR_DT_BOOL && indexExpr->resultType.kind != IR_DT_FLOAT) {
+                setError(ERR_EXP, curr->line, curr->value);  // 索引表达式必须是整数类型
+                *err = 255;
+                hxFree(arrayAccessNode);
+                freeAST(indexExpr);
+                return NULL;
+            }
+
+            arrayAccessNode->arrayAccessIndex = indexExpr;
+
+            if (*index >= size) {
+                setError(ERR_NO_END, curr->line, NULL);
+                *err = 255;
+                hxFree(arrayAccessNode);
+                return NULL;
+            }
+            if (tokens[*index].type == TOK_OPR_SET) {  // sym[val] = exp
                 if (*index + 1 >= size) {
                     setError(ERR_EXP, curr->line, curr->value);
                     *err = 255;
@@ -613,10 +381,10 @@ AFTER_COLON:
                 movNode->data.binary.op = BIN_OPR_SET;
                 movNode->data.binary.varName = wcsdup(curr->value);
 
-                movNode->left = node;
+                movNode->left = arrayAccessNode;  // 左边是数组访问节点
                 // 连等支持
                 movNode->right = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex,
-                                              classTable, err, getPrec(TOK_OPR_SET));
+                                              classTable, err, getPrec(TOK_OPR_SET), isParsingFunArgs);
 
                 if (*err) {
                     hxFree(movNode);
@@ -625,129 +393,370 @@ AFTER_COLON:
                 // 类型推导
                 movNode->resultType = movNode->right->resultType;
                 return movNode;
-            } else if (next->type == TOK_OPR_INC) {  // 自增
-                if (!isFromClass && symIdx == -1) {
-                    setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
-                    *err = 255;
-                    freeAST(node);
-                    return NULL;
-                }
-                (*index)++;  //++
-                ASTNode* incNode = (ASTNode*)calloc(1, sizeof(ASTNode));
-                if (!incNode) {
-                    *err = -1;
-                    return NULL;
-                }
+            }
 
-                incNode->kind = NODE_UNARY;
-                incNode->data.unary.op = UAY_OPR_INC;
-                incNode->data.unary.varName = wcsdup(curr->value);
-                incNode->left = node;
+            return arrayAccessNode;
+        }
+        // 函数调用
+        if (next->type == TOK_OPR_LQUOTE) {  // id({exp,})
+            if (*index + 2 >= size) {
+                setError(ERR_EXP, curr->line, curr->value);
+                *err = 255;
+                return NULL;
+            }
+            ASTNode* funCallNode = (ASTNode*)calloc(1, sizeof(ASTNode));
+            if (!funCallNode) {
+                *err = -1;
+                return NULL;
+            }
+            funCallNode->kind = NODE_FUN_CALL;
+            funCallNode->data.funCall.name = wcsdup(curr->value);
+            int n = *index + 2;
+            // 解析参数
+            int argIndex = n;
+            funCallNode->data.funCall.args = (ASTNode**)calloc(1, sizeof(ASTNode*));
+            funCallNode->data.funCall.arg_count = 0;
 
-                if (*err) {
-                    hxFree(incNode);
-                    return NULL;
-                }
-                incNode->resultType = node->resultType;
-                (*index)++;
-                return incNode;
-            } else if (next->type == TOK_OPR_DEC) {  // 自减
-                if (!isFromClass && symIdx == -1) {
-                    setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
-                    *err = 255;
-                    freeAST(node);
-                    return NULL;
-                }
-                (*index)++;  //++
-                ASTNode* decNode = (ASTNode*)calloc(1, sizeof(ASTNode));
-                if (!decNode) {
-                    *err = -1;
-                    return NULL;
-                }
-
-                decNode->kind = NODE_UNARY;
-                decNode->data.unary.op = UAY_OPR_DIC;
-                decNode->data.unary.varName = wcsdup(curr->value);
-                decNode->left = node;
-
-                if (*err) {
-                    hxFree(decNode);
-                    return NULL;
-                }
-                decNode->resultType = node->resultType;
-                (*index)++;
-                return decNode;
-            } else if (next->type == TOK_OPR_COLON) {
-                (*index)++;
-                while (*index < size && tokens[*index].type == TOK_OPR_COLON) {
-                    // 检查当前节点类型是否为自定义类
-                    if (node->resultType.kind != IR_DT_CUSTOM) {
-                        setError(ERR_CLASS_MEMBER_ACCESS, tokens[*index].line, NULL);
-                        *err = 255;
-                        return NULL;
-                    }
-                    (*index)++;  // 跳过冒号
-                    if (*index >= size || tokens[*index].type != TOK_ID) {
-                        setError(ERR_CLASS_MEMBER_ACCESS, tokens[*index - 1].line, NULL);
-                        *err = 255;
-                        return NULL;
-                    }
-                    // 解析右侧标识符及其后缀（函数调用、数组访问），但不允许再解析冒号
-                    ASTNode* rightNode =
-                        parseAfterID(NULL, tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex,
-                                     node->resultType.customTypeName, classTable, err, true, false);  // allowColon = false
-                    if (!rightNode || *err) {
-                        freeAST(node);
-                        return NULL;
-                    }
-                    // 构建成员访问节点
-                    ASTNode* memberNode = (ASTNode*)calloc(1, sizeof(ASTNode));
-                    if (!memberNode) {
-                        *err = -1;
-                        freeAST(node);
-                        freeAST(rightNode);
-                        return NULL;
-                    }
-                    memberNode->kind = NODE_BINARY;
-                    memberNode->data.binary.op = BIN_OPR_CLASS_MEMBER_ACCESS;
-                    memberNode->left = node;
-                    memberNode->right = rightNode;
-                    memberNode->resultType = rightNode->resultType;
-                    memberNode->token = &tokens[*index - 1];
-                    node = memberNode;
-                }
-                // 循环结束后，继续处理后续可能的后缀
-                (*index)--;
-                goto AFTER_COLON;
-            } else {
-                if (!isFromClass && symIdx == -1) {
-                    setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
-                    *err = 255;
-                    freeAST(node);
-                    return NULL;
+            while (argIndex < size && tokens[argIndex].type != TOK_OPR_RQUOTE) {
+                if (tokens[argIndex].type == TOK_OPR_COMMA) {
+                    argIndex++;
+                    continue;
                 }
 #ifdef HX_DEBUG
-                if (!isFromClass) log(L"已将变量%ls设为有用", outsideTable.at(varScope).vars.at(symIdx).name);
+                log(L"分析实参");
 #endif
-                if (!isFromClass) outsideTable.at(varScope).vars.at(symIdx).isUsed = true;
-                (*index)++;
+                int quoteCount = 0;
+                int tempIndex = argIndex;
+                // 正确处理括号嵌套并找到参数边界喵
+                while (tempIndex < size) {
+                    if (tokens[tempIndex].type == TOK_OPR_LQUOTE) {
+                        quoteCount++;
+                    } else if (tokens[tempIndex].type == TOK_OPR_RQUOTE) {
+                        if (quoteCount == 0) break;  // 找到当前实参的结束边界
+                        quoteCount--;
+                    } else if (tokens[tempIndex].type == TOK_OPR_COMMA) {
+                        if (quoteCount == 0) break;  // 找到当前实参的逗号分隔符
+                    }
+                    tempIndex++;
+                }
 
+                ASTNode* arg = parseExpression(tokens, &argIndex, tempIndex, pitchTable, table, outsideTable, localeScopeIndex,
+                                               classTable, err, true);
+                if (*err != 0) {
+                    freeAST(funCallNode);
+                    return NULL;
+                }
+
+                funCallNode->data.funCall.args = (ASTNode**)realloc(
+                    funCallNode->data.funCall.args, sizeof(ASTNode*) * (funCallNode->data.funCall.arg_count + 1));
+                funCallNode->data.funCall.args[funCallNode->data.funCall.arg_count] = arg;
+                funCallNode->data.funCall.arg_count++;
+                // parseExpression 会执行 (*index)--
+                // 必须手动把它往前推一格
+                argIndex++;
+            }
+            if (tokens[argIndex].type != TOK_OPR_RQUOTE) {
+                setError(ERR_EXP, curr->line,
+                         curr->value);  // 报错：期待表达式
+                *err = 255;
+                freeAST(funCallNode);
+                return NULL;
+            }
+            *index = argIndex + 1;
+            funCallNode->token = curr;
+            funCallNode->resultType.kind = IR_DT_VOID;  // 默认void
+#ifdef HX_DEBUG
+            log(L"获取函数索引和返回值类型(table->fun.size()=%d)", table->fun.size());
+#endif
+            // 获取函数索引和返回值类型
+            if (fromClass == NULL) {
+                if (table->fun.size() > 0) {
+                    for (uint32_t i = 0; i < table->fun.size(); i++) {
+#ifdef HX_DEBUG
+                        log(L"获取函数索引和返回值类型->遍历到：%ls", table->fun[i]->name);
+#endif
+                        // 名字
+                        IR_Function* f = table->fun[i];
+                        if (!f) continue;
+                        if (wcscmp(f->name, funCallNode->data.funCall.name) == 0) {
+                            // 参数个数
+                            if (f->paramCount != funCallNode->data.funCall.arg_count) {
+                                continue;
+                            }
+                            bool match = true;
+                            for (int j = 0; j < funCallNode->data.funCall.arg_count; j++) {
+                                if (funCallNode->data.funCall.args[j]->resultType.kind != f->params[j].type.kind) {
+                                    match = false;
+                                    break;
+                                }
+                                if (funCallNode->data.funCall.args[j]->resultType.kind == IR_DT_CUSTOM) {
+                                    if (wcscmp(funCallNode->data.funCall.args[j]->resultType.customTypeName,
+                                               f->params[j].type.customTypeName) != 0) {
+                                        match = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (match) {
+                                // f->isUsed =
+                                // true;
+                                funCallNode->data.funCall.pitch = pitchTable.enter(f);
+                                funCallNode->data.funCall.pitch->fun = f;
+                                f->pitch = funCallNode->data.funCall.pitch;
+                                funCallNode->data.funCall.ret_type = f->returnType;
+                                funCallNode->resultType = f->returnType;
+#ifdef HX_DEBUG
+                                log(L"找到函数%ls, 索引：%d", f->name, (int)i);
+#endif
+                                return funCallNode;
+                            }
+                        }
+                    }
+                    setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
+                    *err = 255;
+                    return NULL;
+                }
+            } else {
+                IR_Class* fromClassPtr = nullptr;
+                for (int i = 0; i < classTable.size(); i++) {
+                    if (wcscmp(classTable[i]->name, fromClass) == 0) {
+                        fromClassPtr = classTable[i];
+                        break;
+                    }
+                }
+                if (!fromClassPtr) {
+                    setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, fromClass);
+                    *err = 255;
+                    return NULL;
+                }
+
+                // 构造临时 IR_Function 用于查找匹配的成员函数
+                IR_Function tempFun = {};
+                tempFun.name = funCallNode->data.funCall.name;
+                tempFun.paramCount = funCallNode->data.funCall.arg_count;
+                tempFun.params = (IR_FunctionParam*)calloc(tempFun.paramCount, sizeof(IR_FunctionParam));
+                if (!tempFun.params) {
+                    *err = -1;
+                    return NULL;
+                }
+                for (uint32_t i = 0; i < tempFun.paramCount; i++) {
+                    tempFun.params[i].type = funCallNode->data.funCall.args[i]->resultType;
+                }
+
+                PackedClassFunMem* packed = findFunInClass(tempFun, fromClassPtr, classTable);
+                hxFree(tempFun.params);  // 释放临时参数数组
+
+                if (packed == nullptr) {
+                    setError(ERR_CANNOT_FIND_SYMBOL, funCallNode->token->line, funCallNode->data.funCall.name);
+                    *err = 255;
+                    return NULL;
+                }
+
+                funCallNode->data.funCall.pitch = pitchTable.enter(packed->irFun);
+                funCallNode->data.funCall.ret_type = packed->irFun->returnType;
+                funCallNode->resultType = packed->irFun->returnType;
+                delete packed;  // 释放包装对象，irFun 仍有效
+
+                return funCallNode;
+            }
+            return funCallNode;
+        }
+        // 赋值
+        else if (next->type == TOK_OPR_SET) {
+#ifdef HX_DEBUG
+            log(L"L568+ 处理赋值");
+#endif
+            if (isMemberAccessRight) {
+                (*index)++;
                 return node;
             }
+            // 合法的左值：NODE_VAR 或 NODE_BINARY 且 op 为 BIN_OPR_CLASS_MEMBER_ACCESS（或数组访问）
+            bool isValidLeft = false;
+            if (node->kind == NODE_VAR) {
+                isValidLeft = true;
+            } else if (node->left && node->kind == NODE_BINARY && node->data.binary.op == BIN_OPR_CLASS_MEMBER_ACCESS) {
+                isValidLeft = true;
+            }
+            if (!isValidLeft) {
+#ifdef HX_DEBUG
+                log(L"L580+赋值 -> 非法的左值");
+#endif
+                *err = 255;
+                setError(ERR_EXP, node->token->line, NULL);
+                return NULL;
+            }
+
+            if (!isFromClass && symIdx == -1) {
+                setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
+#ifdef HX_DEBUG
+                log(L"L580+赋值 -> 找不到符号");
+#endif
+                *err = 255;
+                freeAST(node);
+                return NULL;
+            }
+            (*index)++;  // tokens[*index] == next == SET
+            if (*index + 1 >= size) {
+                setError(ERR_EXP, curr->line, curr->value);
+                *err = 255;
+                return NULL;
+            }
+            (*index)++;  // tokens[*index] == 等号右边
+            ASTNode* movNode = (ASTNode*)calloc(1, sizeof(ASTNode));
+            if (!movNode) {
+                *err = -1;
+                return NULL;
+            }
+
+            movNode->kind = NODE_BINARY;
+            movNode->data.binary.op = BIN_OPR_SET;
+            movNode->data.binary.varName = wcsdup(curr->value);
+
+            movNode->left = node;
+            // 连等支持
+            movNode->right = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable,
+                                          err, getPrec(TOK_OPR_SET), isParsingFunArgs);
+
+            if (*err) {
+                hxFree(movNode);
+                return NULL;
+            }
+            // 类型推导
+            movNode->resultType = movNode->right->resultType;
+            return movNode;
+        } else if (next->type == TOK_OPR_INC) {  // 自增
+            if (!isFromClass && symIdx == -1) {
+                setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
+                *err = 255;
+                freeAST(node);
+                return NULL;
+            }
+            (*index)++;  //++
+            ASTNode* incNode = (ASTNode*)calloc(1, sizeof(ASTNode));
+            if (!incNode) {
+                *err = -1;
+                return NULL;
+            }
+
+            incNode->kind = NODE_UNARY;
+            incNode->data.unary.op = UAY_OPR_INC;
+            incNode->data.unary.varName = wcsdup(curr->value);
+            incNode->left = node;
+
+            if (*err) {
+                hxFree(incNode);
+                return NULL;
+            }
+            incNode->resultType = node->resultType;
+            (*index)++;
+            return incNode;
+        } else if (next->type == TOK_OPR_DEC) {  // 自减
+            if (!isFromClass && symIdx == -1) {
+                setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
+                *err = 255;
+                freeAST(node);
+                return NULL;
+            }
+            (*index)++;  //++
+            ASTNode* decNode = (ASTNode*)calloc(1, sizeof(ASTNode));
+            if (!decNode) {
+                *err = -1;
+                return NULL;
+            }
+
+            decNode->kind = NODE_UNARY;
+            decNode->data.unary.op = UAY_OPR_DIC;
+            decNode->data.unary.varName = wcsdup(curr->value);
+            decNode->left = node;
+
+            if (*err) {
+                hxFree(decNode);
+                return NULL;
+            }
+            decNode->resultType = node->resultType;
+            (*index)++;
+            return decNode;
+        } else if (next->type == TOK_OPR_COLON) {
+            (*index)++;
+            while (*index < size && tokens[*index].type == TOK_OPR_COLON) {
+                // 检查当前节点类型是否为自定义类
+                if (node->resultType.kind != IR_DT_CUSTOM) {
+                    setError(ERR_CLASS_MEMBER_ACCESS, tokens[*index].line, NULL);
+                    *err = 255;
+                    return NULL;
+                }
+                (*index)++;  // 跳过冒号
+                if (*index >= size || tokens[*index].type != TOK_ID) {
+                    setError(ERR_CLASS_MEMBER_ACCESS, tokens[*index - 1].line, NULL);
+                    *err = 255;
+                    return NULL;
+                }
+                // 解析右侧标识符及其后缀（函数调用、数组访问），但不允许再解析冒号
+                ASTNode* rightNode =
+                    parseAfterID(NULL, tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex,
+                                 node->resultType.customTypeName, classTable, err, true, false);  // allowColon = false
+                if (!rightNode || *err) {
+                    freeAST(node);
+                    return NULL;
+                }
+                // 构建成员访问节点
+                ASTNode* memberNode = (ASTNode*)calloc(1, sizeof(ASTNode));
+                if (!memberNode) {
+                    *err = -1;
+                    freeAST(node);
+                    freeAST(rightNode);
+                    return NULL;
+                }
+                memberNode->kind = NODE_BINARY;
+                memberNode->data.binary.op = BIN_OPR_CLASS_MEMBER_ACCESS;
+                memberNode->left = node;
+                memberNode->right = rightNode;
+                memberNode->resultType = rightNode->resultType;
+                memberNode->token = &tokens[*index - 1];
+                node = memberNode;
+            }
+            // 循环结束后，继续处理后续可能的后缀
+            (*index)--;
+            goto AFTER_COLON;
         } else {
+            if (!isFromClass && symIdx == -1) {
+                setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
+                *err = 255;
+                freeAST(node);
+                return NULL;
+            }
+#ifdef HX_DEBUG
+            if (!isFromClass) log(L"已将变量%ls设为有用", outsideTable.at(varScope).vars.at(symIdx).name);
+#endif
+            if (!isFromClass) outsideTable.at(varScope).vars.at(symIdx).isUsed = true;
+            (*index)++;
+
+            return node;
+
             (*index)++;
         }
         // 对变量标记使用
         if (!isFromClass && symIdx != -1 && symIdx < (int)outsideTable.at(varScope).vars.size()) {
             outsideTable.at(varScope).vars.at(symIdx).isUsed = true;
         }
+    } else {
+        if (!isFromClass && symIdx == -1) {
+            setError(ERR_CANNOT_FIND_SYMBOL, curr->line, curr->value);
+            *err = 255;
+            freeAST(node);
+            return NULL;
+        }
+        if (!isFromClass && symIdx != -1 && symIdx < (int)outsideTable.at(varScope).vars.size()) {
+            outsideTable.at(varScope).vars.at(symIdx).isUsed = true;
+        }
+        (*index)++;
     }
     return node;
 }
 // 解析数字、变量、括号
 static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
                              std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
-                             int* err) noexcept {
+                             int* err, bool isParsingFunArgs = false) noexcept {
     if (*index >= size) {
         *err = 255;
         return NULL;
@@ -817,8 +826,8 @@ static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTa
 
         } else {
             // 不是强制转换，而是普通的算术括号表达式
-            ASTNode* inner =
-                parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, 0);
+            ASTNode* inner = parseExprRec(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable,
+                                          err, 0, isParsingFunArgs);
             if (*err == 0 && (*index < size && tokens[*index].type == TOK_OPR_RQUOTE)) {
                 (*index)++;  // 吃掉右括号
                 return inner;
@@ -864,8 +873,8 @@ static ASTNode* parsePrimary(Token* tokens, int* index, int size, FunCallPitchTa
     // 处理变量
     if (tokens[*index].type == TOK_ID) {
         // 先不管有没有等号，统一先把当前标识符解析成变量节点
-        return parseAfterID(NULL, tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, NULL, classTable,
-                            err);
+        return parseAfterID(NULL, tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, NULL, classTable, err,
+                            isParsingFunArgs);
     }
 
     *err = 255;
@@ -893,8 +902,9 @@ IR_DataType getResultTypeForBinaryOp(IR_DataType left, IR_DataType right) noexce
 // 为错误码输出，min_prec 为当前最小优先级，返回表达式 AST 根节点。
 ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
                       std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable, int* err,
-                      int min_prec) noexcept {
-    ASTNode* lhs = parsePrimary(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err);
+                      int min_prec, bool isParsingFunArgs = false) noexcept {
+    ASTNode* lhs =
+        parsePrimary(tokens, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, isParsingFunArgs);
     if (*err != 0 || lhs == NULL) return lhs;
 
     while (*index < size) {
@@ -1074,14 +1084,15 @@ ASTNode* parseExprRec(Token* tokens, int* index, int size, FunCallPitchTable& pi
 }
 ASTNode* parseExpression(Token* exp, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
                          std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
-                         int* err) noexcept {
+                         int* err, bool isParsingFunArgs) noexcept {
 #ifdef HX_DEBUG
     log(L"\n---------分析表达式");
 #endif
     if (!exp || !index || !err || !table) return NULL;
     *err = 0;
 
-    ASTNode* root = parseExprRec(exp, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, 0);
+    ASTNode* root =
+        parseExprRec(exp, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, 0, isParsingFunArgs);
     if (*err == 0 && root != NULL && *index < size) {
         if (exp[*index].type != TOK_END) {
             *err = 255;

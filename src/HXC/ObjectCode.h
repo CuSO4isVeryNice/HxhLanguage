@@ -60,6 +60,7 @@ enum {
 
     OP_HEAP_ALLOC,  // OP_HEAP_ALLOC size(u32)：分配内存的地址放栈顶
     OP_CAL_NATIVE,  // OP_CAL_NATIVE funName(常量池索引，u32) argCount(u32) 标记是否返回void(bool 1字节)
+    OP_COPY_ARR_DATA_FROM_CONSTANT,  // 从常量池复制数组数据到栈顶存的堆地址 OP_COPY_ARR_DATA_FROM_CONSTANT <constantIndex(u32)> <size(u32)>
 };
 //clang-format on
 typedef uint8_t ParamType;

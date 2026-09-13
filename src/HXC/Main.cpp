@@ -176,7 +176,6 @@ int main(int argc, char* argv[]) {
         fwprintf(outputStream, L"\33[1;34m[INFO]\33[0m正在生成目标代码\n");
         int genError = 0;
         ObjectCode* objCode = generateObjectCode(program, &genError);
-        objCode->isLibPacked = isPackSharedLibInObjFile;
 
         if (genError == 255) {
             fwprintf(errorStream, L"%ls\n", errorMessageBuffer);
@@ -195,6 +194,7 @@ int main(int argc, char* argv[]) {
 #ifdef HX_DEBUG
         log(L"libListSize:%d", objCode->constantPool.libNameList.size());
 #endif
+        objCode->isLibPacked = isPackSharedLibInObjFile;
 
         FILE* objFile = fopen(objPath.c_str(), "wb");
         if (writeObjectCode(getDirectory(objPath), objFile, *objCode)) {

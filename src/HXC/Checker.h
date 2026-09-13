@@ -7,7 +7,7 @@
 
 extern ASTNode* parseExpression(Token* exp, int* index, int size, FunCallPitchTable& pitchTable, SymbolTable* table,
                                 std::vector<SymbolTable>& outsideTable, int localeScopeIndex, std::vector<IR_Class*> classTable,
-                                int* err) noexcept;
+                                int* err, bool isParsingFunArgs = false) noexcept;
 void freeAST(ASTNode* node) noexcept;
 inline IR_Class* getClassByName(const wchar_t* name, IR_Program* currentIRProgram);
 static int getVarIndex(const wchar_t* name, SymbolTable* table);
@@ -115,6 +115,273 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                 tempLocalScopePtr = &(tempOutsideScopes.at(blockNum));
             }
             if (wcscmp(currentToken.value, L"var") == 0) {  // var:id[:type][=exp];
+                #ifdef HX_DEBUG
+                log(L"返回类型推导.->var");
+                #endif
+                Symbol newVar = {};
+                if (index + 1 >= fun->bodyTokenCount) {
+                    setError(ERR_DEF_VAR, currentToken.line, NULL);
+                    return 255;
+                }
+                index++;  // 指向冒号
+                if (fun->bodyTokens[index].type != TOK_OPR_COLON) {
+                    #ifdef HX_DEBUG
+                    log(L"返回类型推导.->var -> 冒号");
+                    #endif
+                    setError(ERR_DEF_VAR, currentToken.line, NULL);
+                    return 255;
+                }
+                if (index + 1 >= fun->bodyTokenCount) {
+                    setError(ERR_DEF_VAR, currentToken.line, NULL);
+                    return 255;
+                }
+                index++;  // 指向标识符
+                if (fun->bodyTokens[index].type != TOK_ID) {
+                    #ifdef HX_DEBUG
+                    log(L"返回类型推导.->var -> 标识符");
+                    #endif
+                    setError(ERR_DEF_VAR, currentToken.line, NULL);
+                    return 255;
+                }
+                newVar.name = (wchar_t*)calloc(wcslen(fun->bodyTokens[index].value) + 1, sizeof(wchar_t));
+                if (!(newVar.name)) {
+                    return -1;
+                }
+                wcscpy(newVar.name, fun->bodyTokens[index].value);
+                // 检查变量唯一性
+                if (getVarIndex(newVar.name, tempLocalScopePtr) != -1) {
+                    setError(ERR_VAR_REPEATED, currentToken.line, NULL);
+                    return 255;
+                }
+                if (index + 1 >= fun->bodyTokenCount) {
+                    setError(ERR_DEF_VAR, currentToken.line, NULL);
+                    return 255;
+                }
+                index++;  // 指向结束标志或:或=
+                if (fun->bodyTokens[index].type == TOK_OPR_COLON) {
+                    newVar.isTypeKnown = true;
+                    if (index + 1 >= fun->bodyTokenCount) {
+                        setError(ERR_DEF_VAR, currentToken.line, NULL);
+                        return 255;
+                    }
+                    index++;  // 指向类型名
+                    if (fun->bodyTokens[index].type != TOK_ID && fun->bodyTokens[index].type != TOK_KW) {
+                        setError(ERR_DEF_VAR, currentToken.line, NULL);
+                        return 255;
+                    }
+
+                    // 提前越界检查，仅检查
+                    if (index + 1 >= fun->bodyTokenCount) {
+                        setError(ERR_DEF_VAR, currentToken.line, NULL);
+                        return 255;
+                    }
+                    IR_Function* function = fun;
+                    IR_Program* currentProgram = program;
+                    if (wcscmp(function->bodyTokens[index].value, L"int") == 0 ||
+                        wcscmp(function->bodyTokens[index].value, L"整型") == 0) {
+                        newVar.type.kind = IR_DT_INT;
+                        newVar.size = 4;
+                        // int&
+                        if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                            newVar.type.kind = IR_DT_INT_REFER;
+                            newVar.size = 4;
+                            index++;
+                            // int[]
+                        } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                            if (index + 2 >= function->bodyTokenCount) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            index++;
+                            if (!(function->bodyTokens[index + 1].type == TOK_OPR_RBRACKET ||
+                                  function->bodyTokens[index + 2].type == TOK_OPR_RBRACKET)) {
+#ifdef HX_DEBUG
+                                log("index+1: %ls,   index+2: %ls", function->bodyTokens[index + 1].value,
+                                    function->bodyTokens[index + 2].value);
+#endif
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            int arrSize = -1;
+                            if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                newVar.type.arrayLength = arrSize;
+                            }
+                            newVar.type.kind = IR_DT_INT_ARR;
+                            newVar.size = 4;
+                            index += 2;
+                        }
+                    } else if (wcscmp(function->bodyTokens[index].value, L"float") == 0 ||
+                               wcscmp(function->bodyTokens[index].value, L"浮点型") == 0) {
+                        newVar.type.kind = IR_DT_FLOAT;
+                        newVar.size = 8;
+                        if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                            newVar.type.kind = IR_DT_FLOAT_REFER;
+                            newVar.size = 4;  // 实为void*大小
+                            index++;
+                        } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                            if (index + 2 >= function->bodyTokenCount) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            index++;
+                            if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            int arrSize = -1;
+                            if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                newVar.type.arrayLength = arrSize;
+                            }
+                            newVar.type.kind = IR_DT_FLOAT_ARR;
+                            newVar.size = 4;
+                            index += 2;
+                        }
+                    } else if (wcscmp(function->bodyTokens[index].value, L"char") == 0 ||
+                               wcscmp(function->bodyTokens[index].value, L"字符型") == 0) {
+                        newVar.type.kind = IR_DT_CHAR;
+                        newVar.size = 2;
+                        if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                            newVar.size = 4;
+                            newVar.type.kind = IR_DT_CHAR_REFER;
+                            index++;
+                        } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                            if (index + 2 >= function->bodyTokenCount) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            index++;
+                            if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            int arrSize = -1;
+                            if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                newVar.type.arrayLength = arrSize;
+                            }
+                            newVar.type.kind = IR_DT_CHAR_ARR;
+                            newVar.size = 4;
+                            index += 2;
+                        }
+                    } else if (wcscmp(function->bodyTokens[index].value, L"str") == 0 ||
+                               wcscmp(function->bodyTokens[index].value, L"字符串型") == 0) {
+                        newVar.type.kind = IR_DT_STRING;
+                        newVar.size = 4;
+                        if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                            newVar.type.kind = IR_DT_STRING_REFER;
+                            index++;
+                        } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                            if (index + 2 >= function->bodyTokenCount) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            index++;
+                            if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            int arrSize = -1;
+                            if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                newVar.type.arrayLength = arrSize;
+                            }
+                            newVar.type.kind = IR_DT_STRING_ARR;
+                            index += 2;
+                        }
+                    }
+                    if (function->bodyTokens[index].type == TOK_ID) {
+                        newVar.type.kind = IR_DT_CUSTOM;
+                        if (getClassByName(function->bodyTokens[index].value, currentProgram) == NULL) {
+                            setError(ERR_UNKNOWN_TYPE, function->bodyTokens[index].line, function->bodyTokens[index].value);
+                            return 255;
+                        }
+                        newVar.type.customTypeName =
+                            (wchar_t*)calloc(wcslen(function->bodyTokens[index].value) + 1, sizeof(wchar_t));
+                        if (!(newVar.type.customTypeName)) {
+                            return -1;
+                        }
+                        wcscpy(newVar.type.customTypeName, function->bodyTokens[index].value);
+                        if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                            newVar.type.kind = IR_DT_CUSTOM_REFER;
+                            index++;
+                        } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                            if (index + 2 >= function->bodyTokenCount) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            index++;
+                            if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            }
+                            int arrSize = -1;
+                            if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                newVar.type.arrayLength = arrSize;
+                            }
+                            newVar.type.kind = IR_DT_CUSTOM_ARR;
+                            index += 2;
+                        }
+                    }
+                }
+                if (fun->bodyTokens[index].type == TOK_OPR_SET) {
+                    #ifdef HX_DEBUG
+                    log(L"返回类型推导.->var = 表达式");
+                    #endif
+                    bool isOrginalTypeKnown = newVar.isTypeKnown;
+                    newVar.isTypeKnown = true;
+
+                    if (index + 1 >= fun->bodyTokenCount) {
+                        setError(ERR_DEF_VAR, currentToken.line, NULL);
+                        return 255;
+                    }
+                    index++;  // 指向表达式起始位置
+                    ASTNode* expNode = parseExpression(fun->bodyTokens, &index, fun->bodyTokenCount, feckPitchTable,
+                                                       &tempLocalScope, tempOutsideScopes, blockNum, program->classes, &err);
+                    if (err != 0 || !expNode) {
+                        return 255;
+                    }
+                    if (isOrginalTypeKnown) {
+                        if (newVar.type.kind != IR_DT_CUSTOM) {
+                            if (newVar.type.kind == IR_DT_STRING && expNode->resultType.kind != IR_DT_STRING) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_INT_ARR && expNode->resultType.kind != IR_DT_INT_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_FLOAT_ARR && expNode->resultType.kind != IR_DT_FLOAT_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_CHAR_ARR && expNode->resultType.kind != IR_DT_CHAR_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_STRING_ARR && expNode->resultType.kind != IR_DT_STRING_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_CUSTOM_ARR && expNode->resultType.kind != IR_DT_CUSTOM_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+
+                                return 255;
+                            }
+                        } else if ((newVar.type.kind == IR_DT_CUSTOM && expNode->resultType.kind != IR_DT_CUSTOM) ||
+                                   (newVar.type.customTypeName && expNode->resultType.customTypeName &&
+                                    wcscmp(newVar.type.customTypeName, expNode->resultType.customTypeName) != 0)) {
+                            setError(ERR_TYPE, currentToken.line, NULL);
+                            return 255;
+                        }
+                    } else {
+                        newVar.type = expNode->resultType;
+                        newVar.isTypeKnown = true;
+                    }
+                }
+                tempLocalScopePtr->vars.push_back(newVar);
+            } else if (wcscmp(currentToken.value, L"定义变量") == 0) {  // 定义变量: <id> [, 类型是:<kw>|<id>] = <expression> ;
                 Symbol newVar = {};
                 if (index + 1 >= fun->bodyTokenCount) {
                     setError(ERR_DEF_VAR, currentToken.line, NULL);
@@ -148,176 +415,239 @@ int deduceFunctionReturnTypes(IR_Program* program) {
                     setError(ERR_DEF_VAR, currentToken.line, NULL);
                     return 255;
                 }
-                index++;  // 指向结束标志或:或=
-                if (fun->bodyTokens[index].type == TOK_OPR_COLON) {
-                    newVar.isTypeKnown = true;
+                index++;
+                if (fun->bodyTokens[index].type == TOK_OPR_COMMA) {
+                    index++;
                     if (index + 1 >= fun->bodyTokenCount) {
                         setError(ERR_DEF_VAR, currentToken.line, NULL);
                         return 255;
                     }
-                    index++;  // 指向类型名
-                    if (fun->bodyTokens[index].type != TOK_ID && fun->bodyTokens[index].type != TOK_KW) {
+                    if (wcscmp(fun->bodyTokens[index].value, L"类型是") != 0) {
+                        setError(ERR_DEF_VAR, currentToken.line, NULL);
+                        return 255;
+                    }
+                    index++;
+                    if (fun->bodyTokens[index].type == TOK_OPR_COLON) {
+                        newVar.isTypeKnown = true;
+                        if (index + 1 >= fun->bodyTokenCount) {
+                            setError(ERR_DEF_VAR, currentToken.line, NULL);
+                            return 255;
+                        }
+                        index++;  // 指向类型名
+                        if (fun->bodyTokens[index].type != TOK_ID && fun->bodyTokens[index].type != TOK_KW) {
+                            setError(ERR_DEF_VAR, currentToken.line, NULL);
+                            return 255;
+                        }
+
+                        // 提前越界检查，仅检查
+                        if (index + 1 >= fun->bodyTokenCount) {
+                            setError(ERR_DEF_VAR, currentToken.line, NULL);
+                            return 255;
+                        }
+                        IR_Function* function = fun;
+                        IR_Program* currentProgram = program;
+                        if (wcscmp(function->bodyTokens[index].value, L"int") == 0 ||
+                            wcscmp(function->bodyTokens[index].value, L"整型") == 0) {
+                            newVar.type.kind = IR_DT_INT;
+                            newVar.size = 4;
+                            // int&
+                            if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                                newVar.type.kind = IR_DT_INT_REFER;
+                                newVar.size = 4;
+                                index++;
+                                // int[]
+                            } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                                if (index + 2 >= function->bodyTokenCount) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                index++;
+                                if (!(function->bodyTokens[index + 1].type == TOK_OPR_RBRACKET ||
+                                      function->bodyTokens[index + 2].type == TOK_OPR_RBRACKET)) {
+#ifdef HX_DEBUG
+                                    log("index+1: %ls,   index+2: %ls", function->bodyTokens[index + 1].value,
+                                        function->bodyTokens[index + 2].value);
+#endif
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                int arrSize = -1;
+                                if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                    arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                    newVar.type.arrayLength = arrSize;
+                                }
+                                newVar.type.kind = IR_DT_INT_ARR;
+                                newVar.size = 4;
+                                index += 2;
+                            }
+                        } else if (wcscmp(function->bodyTokens[index].value, L"float") == 0 ||
+                                   wcscmp(function->bodyTokens[index].value, L"浮点型") == 0) {
+                            newVar.type.kind = IR_DT_FLOAT;
+                            newVar.size = 8;
+                            if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                                newVar.type.kind = IR_DT_FLOAT_REFER;
+                                newVar.size = 4;  // 实为void*大小
+                                index++;
+                            } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                                if (index + 2 >= function->bodyTokenCount) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                index++;
+                                if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                    function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                int arrSize = -1;
+                                if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                    arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                    newVar.type.arrayLength = arrSize;
+                                }
+                                newVar.type.kind = IR_DT_FLOAT_ARR;
+                                newVar.size = 4;
+                                index += 2;
+                            }
+                        } else if (wcscmp(function->bodyTokens[index].value, L"char") == 0 ||
+                                   wcscmp(function->bodyTokens[index].value, L"字符型") == 0) {
+                            newVar.type.kind = IR_DT_CHAR;
+                            newVar.size = 2;
+                            if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                                newVar.size = 4;
+                                newVar.type.kind = IR_DT_CHAR_REFER;
+                                index++;
+                            } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                                if (index + 2 >= function->bodyTokenCount) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                index++;
+                                if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                    function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                int arrSize = -1;
+                                if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                    arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                    newVar.type.arrayLength = arrSize;
+                                }
+                                newVar.type.kind = IR_DT_CHAR_ARR;
+                                newVar.size = 4;
+                                index += 2;
+                            }
+                        } else if (wcscmp(function->bodyTokens[index].value, L"str") == 0 ||
+                                   wcscmp(function->bodyTokens[index].value, L"字符串型") == 0) {
+                            newVar.type.kind = IR_DT_STRING;
+                            newVar.size = 4;
+                            if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                                newVar.type.kind = IR_DT_STRING_REFER;
+                                index++;
+                            } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                                if (index + 2 >= function->bodyTokenCount) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                index++;
+                                if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                    function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                int arrSize = -1;
+                                if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                    arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                    newVar.type.arrayLength = arrSize;
+                                }
+                                newVar.type.kind = IR_DT_STRING_ARR;
+                                index += 2;
+                            }
+                        }
+                        if (function->bodyTokens[index].type == TOK_ID) {
+                            newVar.type.kind = IR_DT_CUSTOM;
+                            if (getClassByName(function->bodyTokens[index].value, currentProgram) == NULL) {
+                                setError(ERR_UNKNOWN_TYPE, function->bodyTokens[index].line, function->bodyTokens[index].value);
+                                return 255;
+                            }
+                            newVar.type.customTypeName =
+                                (wchar_t*)calloc(wcslen(function->bodyTokens[index].value) + 1, sizeof(wchar_t));
+                            if (!(newVar.type.customTypeName)) {
+                                return -1;
+                            }
+                            wcscpy(newVar.type.customTypeName, function->bodyTokens[index].value);
+                            if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
+                                newVar.type.kind = IR_DT_CUSTOM_REFER;
+                                index++;
+                            } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
+                                if (index + 2 >= function->bodyTokenCount) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                index++;
+                                if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
+                                    function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
+                                    setError(ERR_TYPE, currentToken.line, NULL);
+                                    return 255;
+                                }
+                                int arrSize = -1;
+                                if (function->bodyTokens[index + 1].type == TOK_VAL) {
+                                    arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
+                                    newVar.type.arrayLength = arrSize;
+                                }
+                                newVar.type.kind = IR_DT_CUSTOM_ARR;
+                                index += 2;
+                            }
+                        }
+                    } else {
                         setError(ERR_DEF_VAR, currentToken.line, NULL);
                         return 255;
                     }
                 }
-                // 提前越界检查，仅检查
-                if (index + 1 >= fun->bodyTokenCount) {
-                    setError(ERR_DEF_VAR, currentToken.line, NULL);
-                    return 255;
-                }
-                IR_Function* function = fun;
-                IR_Program* currentProgram = program;
-                if (wcscmp(function->bodyTokens[index].value, L"int") == 0 ||
-                    wcscmp(function->bodyTokens[index].value, L"整型") == 0) {
-                    newVar.type.kind = IR_DT_INT;
-                    newVar.size = 4;
-                    // int&
-                    if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
-                        newVar.type.kind = IR_DT_INT_REFER;
-                        newVar.size = 4;
-                        index++;
-                        // int[]
-                    } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->bodyTokenCount) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        index++;
-                        if (!(function->bodyTokens[index + 1].type == TOK_OPR_RBRACKET ||
-                              function->bodyTokens[index + 2].type == TOK_OPR_RBRACKET)) {
-#ifdef HX_DEBUG
-                            log("index+1: %ls,   index+2: %ls", function->bodyTokens[index + 1].value,
-                                function->bodyTokens[index + 2].value);
-#endif
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        int arrSize = -1;
-                        if (function->bodyTokens[index + 1].type == TOK_VAL) {
-                            arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
-                            newVar.type.arrayLength = arrSize;
-                        }
-                        newVar.type.kind = IR_DT_INT_ARR;
-                        newVar.size = 4;
-                        index += 2;
-                    }
-                } else if (wcscmp(function->bodyTokens[index].value, L"float") == 0 ||
-                           wcscmp(function->bodyTokens[index].value, L"浮点型") == 0) {
-                    newVar.type.kind = IR_DT_FLOAT;
-                    newVar.size = 8;
-                    if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
-                        newVar.type.kind = IR_DT_FLOAT_REFER;
-                        newVar.size = 4;  // 实为void*大小
-                        index++;
-                    } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->bodyTokenCount) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        index++;
-                        if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        int arrSize = -1;
-                        if (function->bodyTokens[index + 1].type == TOK_VAL) {
-                            arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
-                            newVar.type.arrayLength = arrSize;
-                        }
-                        newVar.type.kind = IR_DT_FLOAT_ARR;
-                        newVar.size = 4;
-                        index += 2;
-                    }
-                } else if (wcscmp(function->bodyTokens[index].value, L"char") == 0 ||
-                           wcscmp(function->bodyTokens[index].value, L"字符型") == 0) {
-                    newVar.type.kind = IR_DT_CHAR;
-                    newVar.size = 2;
-                    if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
-                        newVar.size = 4;
-                        newVar.type.kind = IR_DT_CHAR_REFER;
-                        index++;
-                    } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->bodyTokenCount) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        index++;
-                        if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        int arrSize = -1;
-                        if (function->bodyTokens[index + 1].type == TOK_VAL) {
-                            arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
-                            newVar.type.arrayLength = arrSize;
-                        }
-                        newVar.type.kind = IR_DT_CHAR_ARR;
-                        newVar.size = 4;
-                        index += 2;
-                    }
-                } else if (wcscmp(function->bodyTokens[index].value, L"str") == 0 ||
-                           wcscmp(function->bodyTokens[index].value, L"字符串型") == 0) {
-                    newVar.type.kind = IR_DT_STRING;
-                    newVar.size = 4;
-                    if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
-                        newVar.type.kind = IR_DT_STRING_REFER;
-                        index++;
-                    } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->bodyTokenCount) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        index++;
-                        if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        int arrSize = -1;
-                        if (function->bodyTokens[index + 1].type == TOK_VAL) {
-                            arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
-                            newVar.type.arrayLength = arrSize;
-                        }
-                        newVar.type.kind = IR_DT_STRING_ARR;
-                        index += 2;
-                    }
-                }
-                if (function->bodyTokens[index].type == TOK_ID) {
-                    newVar.type.kind = IR_DT_CUSTOM;
-                    if (getClassByName(function->bodyTokens[index].value, currentProgram) == NULL) {
-                        setError(ERR_UNKNOWN_TYPE, function->bodyTokens[index].line, function->bodyTokens[index].value);
+                if (fun->bodyTokens[index].type == TOK_OPR_SET) {
+                    bool isOrginalTypeKnown = newVar.isTypeKnown;
+                    newVar.isTypeKnown = true;
+
+                    if (index + 1 >= fun->bodyTokenCount) {
+                        setError(ERR_DEF_VAR, currentToken.line, NULL);
                         return 255;
                     }
-                    newVar.type.customTypeName =
-                        (wchar_t*)calloc(wcslen(function->bodyTokens[index].value) + 1, sizeof(wchar_t));
-                    if (!(newVar.type.customTypeName)) {
-                        return -1;
+                    index++;  // 指向表达式起始位置
+                    ASTNode* expNode = parseExpression(fun->bodyTokens, &index, fun->bodyTokenCount, feckPitchTable,
+                                                       &tempLocalScope, tempOutsideScopes, blockNum, program->classes, &err);
+                    if (err != 0 || !expNode) {
+                        return 255;
                     }
-                    wcscpy(newVar.type.customTypeName, function->bodyTokens[index].value);
-                    if (function->bodyTokens[index + 1].type == TOK_OPR_REFER) {
-                        newVar.type.kind = IR_DT_CUSTOM_REFER;
-                        index++;
-                    } else if (function->bodyTokens[index + 1].type == TOK_OPR_LBRACKET) {
-                        if (index + 2 >= function->bodyTokenCount) {
+                    if (isOrginalTypeKnown) {
+                        if (newVar.type.kind != IR_DT_CUSTOM) {
+                            if (newVar.type.kind == IR_DT_STRING && expNode->resultType.kind != IR_DT_STRING) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_INT_ARR && expNode->resultType.kind != IR_DT_INT_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_FLOAT_ARR && expNode->resultType.kind != IR_DT_FLOAT_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_CHAR_ARR && expNode->resultType.kind != IR_DT_CHAR_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_STRING_ARR && expNode->resultType.kind != IR_DT_STRING_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+                                return 255;
+                            } else if (newVar.type.kind == IR_DT_CUSTOM_ARR && expNode->resultType.kind != IR_DT_CUSTOM_ARR) {
+                                setError(ERR_TYPE, currentToken.line, NULL);
+
+                                return 255;
+                            }
+                        } else if ((newVar.type.kind == IR_DT_CUSTOM && expNode->resultType.kind != IR_DT_CUSTOM) ||
+                                   (newVar.type.customTypeName && expNode->resultType.customTypeName &&
+                                    wcscmp(newVar.type.customTypeName, expNode->resultType.customTypeName) != 0)) {
                             setError(ERR_TYPE, currentToken.line, NULL);
                             return 255;
                         }
-                        index++;
-                        if (function->bodyTokens[index + 1].type != TOK_OPR_RBRACKET &&
-                            function->bodyTokens[index + 2].type != TOK_OPR_RBRACKET) {
-                            setError(ERR_TYPE, currentToken.line, NULL);
-                            return 255;
-                        }
-                        int arrSize = -1;
-                        if (function->bodyTokens[index + 1].type == TOK_VAL) {
-                            arrSize = wcstol(function->bodyTokens[index + 1].value, nullptr, 0);
-                            newVar.type.arrayLength = arrSize;
-                        }
-                        newVar.type.kind = IR_DT_CUSTOM_ARR;
-                        index += 2;
+                    } else {
+                        newVar.type = expNode->resultType;
+                        newVar.isTypeKnown = true;
                     }
                 }
                 tempLocalScopePtr->vars.push_back(newVar);

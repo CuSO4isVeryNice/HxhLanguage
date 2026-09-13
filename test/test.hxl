@@ -1,5 +1,6 @@
 lib:"TestLib.dll";
 lib:"TestLibAarch64.so";
+lib:"TestLib_x86.so";
 
 cls: Test {
     var:var1:int;
@@ -23,9 +24,10 @@ lib:fun:printI32Value(num:int):void;
     __hx_write_string__ "---------------------------------------------\n";
     
     libFunTest();
-    
-    var:newVar:Test;
-    newVar:fun1();
+
     printI32Value(114);
+    var:i32Var:int = 514;
+    printI32Value(i32Var);
+    
     ret：0。
 }

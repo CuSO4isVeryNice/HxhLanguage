@@ -1207,7 +1207,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
         // wprintf(L"%ls", function->bodyTokens[index].value);
         ASTNode* expNode = parseExpression(function->bodyTokens, &index, function->bodyTokenCount, pitchTable,
                                            &(outsideScopes.at(localeScopeIndex)), outsideScopes, localeScopeIndex,
-                                           currentProgram->classes, err);
+                                           currentProgram->classes, err, false);
         if (*err != 0 || !expNode) {
             delete (proc);
             return 255;
@@ -1283,7 +1283,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
     } else if (currentToken.type == TOK_ID) {  // 赋值或调用函数
         ASTNode* expNode = parseExpression(function->bodyTokens, &index, function->bodyTokenCount, pitchTable,
                                            &(outsideScopes.at(localeScopeIndex)), outsideScopes, localeScopeIndex,
-                                           currentProgram->classes, err);
+                                           currentProgram->classes, err, false);
         if (*err != 0 || !expNode) {
             delete (proc);
             return 255;
@@ -1599,16 +1599,184 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
         index++;
 
         bool isInit = false;
-        Instruction initInst = {};  // 初始化的指令
-        int initInstBegin = proc->instructions.size();
+        const int initInstBegin = proc->instructions.size();
+        bool isAlreadyGenHeapAllocInst = false;
         if (function->bodyTokens[index].type == TOK_OPR_SET) {
             isInit = true;
-            if (newVar.isTypeKnown) {  //  <=> 已显示声明类型
-            }
+            bool isOrginalTypeKnown = newVar.isTypeKnown;
             newVar.isTypeKnown = true;
+
+            if (index + 1 >= function->bodyTokenCount) {
+                setError(ERR_DEF_VAR, currentToken.line, NULL);
+                *err = 255;
+                delete (proc);
+                return 255;
+            }
+            index++;  // 指向表达式起始位置
+            ASTNode* expNode = parseExpression(function->bodyTokens, &index, function->bodyTokenCount, pitchTable,
+                                               &(outsideScopes.at(localeScopeIndex)), outsideScopes, localeScopeIndex,
+                                               currentProgram->classes, err, false);
+            if (*err != 0 || !expNode) {
+                delete (proc);
+                return 255;
+            }
+            if (isOrginalTypeKnown) {
+                if (newVar.type.kind != IR_DT_CUSTOM) {
+                    if (newVar.type.kind == IR_DT_STRING && expNode->resultType.kind != IR_DT_STRING) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_INT_ARR && expNode->resultType.kind != IR_DT_INT_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_FLOAT_ARR && expNode->resultType.kind != IR_DT_FLOAT_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_CHAR_ARR && expNode->resultType.kind != IR_DT_CHAR_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_STRING_ARR && expNode->resultType.kind != IR_DT_STRING_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_CUSTOM_ARR && expNode->resultType.kind != IR_DT_CUSTOM_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    }
+                } else if ((newVar.type.kind == IR_DT_CUSTOM && expNode->resultType.kind != IR_DT_CUSTOM) ||
+                           (newVar.type.customTypeName && expNode->resultType.customTypeName &&
+                            wcscmp(newVar.type.customTypeName, expNode->resultType.customTypeName) != 0)) {
+                    setError(ERR_TYPE, currentToken.line, NULL);
+                    *err = 255;
+                    delete (proc);
+                    return 255;
+                } else if (newVar.type.kind == IR_DT_CUSTOM && expNode->resultType.kind == IR_DT_CUSTOM &&
+                           newVar.type.customTypeName && !expNode->resultType.customTypeName) {
+                    setError(ERR_TYPE, currentToken.line, NULL);
+                    *err = 255;
+                    delete (proc);
+                    return 255;
+                } else if (expNode->resultType.kind == IR_DT_CUSTOM && newVar.type.kind != IR_DT_CUSTOM) {
+                    setError(ERR_TYPE, currentToken.line, NULL);
+                    *err = 255;
+                    delete (proc);
+                    return 255;
+                }
+            } else {
+                newVar.type = expNode->resultType;
+                newVar.isTypeKnown = true;
+            }
+            // 生成表达式指令
+            int inst_index = proc->instructions.size();
+            int inst_size = proc->instructions.size();
+            generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, currentProgram->classes,
+                                        constantPool, outsideScopes, procIndex, err);
+            if (*err != 0) {
+                freeAST(expNode);
+                return 255;
+            }
+
+            if (expNode->resultType.kind == IR_DT_CUSTOM_ARR || expNode->resultType.kind == IR_DT_STRING_ARR ||
+                expNode->resultType.kind == IR_DT_INT_ARR || expNode->resultType.kind == IR_DT_FLOAT_ARR ||
+                expNode->resultType.kind == IR_DT_CHAR_ARR) {
+                isAlreadyGenHeapAllocInst = true;
+                // 若为数组，需生成分配堆内存的指令
+                if (newVar.isTypeKnown && newVar.type.arrayLength != 0) {
+                    // 分配堆内存的指令应在初始化指令之前
+                    if (newVar.type.kind == IR_DT_CHAR_ARR || newVar.type.kind == IR_DT_CUSTOM_ARR ||
+                        newVar.type.kind == IR_DT_FLOAT_ARR || newVar.type.kind == IR_DT_INT_ARR ||
+                        newVar.type.kind == IR_DT_STRING_ARR) {  // alloc + store ptr + store length
+                        int allocInstIndex = 0;
+                        if (isInit) {
+                            proc->instructions.insert(proc->instructions.begin() + initInstBegin, 4, Instruction{OP_NOP});
+                            allocInstIndex = initInstBegin;
+                        } else {
+                            proc->instructions.resize(proc->instructions.size() + 4);
+                            if (proc->instructions.size() >= 4) allocInstIndex = proc->instructions.size() - 4;
+                        }
+                        // 分配堆内存并将地址压栈
+                        Instruction& allocInst = proc->instructions.at(allocInstIndex);
+                        allocInst.opcode = OP_HEAP_ALLOC;
+                        uint32_t size = newVar.type.arrayLength;
+                        if (newVar.type.kind == IR_DT_CHAR_ARR) {
+                            size = size * sizeof(uint16_t);
+                        } else if (newVar.type.kind == IR_DT_CUSTOM_ARR) {
+                            size = size * 4;
+                        } else if (newVar.type.kind == IR_DT_FLOAT_ARR) {
+                            size = size * sizeof(double);
+                        } else if (newVar.type.kind == IR_DT_INT_ARR) {
+                            size = size * sizeof(int32_t);
+                        } else if (newVar.type.kind == IR_DT_STRING_ARR) {
+                            size = size * 4;
+                        }
+                        memcpy(allocInst.params[0].value, &size, sizeof(uint32_t));
+
+                        Instruction& movAddrInst = proc->instructions.at(allocInstIndex + 1);
+                        movAddrInst.opcode = OP_STORE_VAR;
+                        movAddrInst.params[0].type = PARAM_TYPE_OFFEST;
+                        movAddrInst.params[1].type = PARAM_TYPE_SIZE;
+
+                        Instruction& pushLenInst = proc->instructions.at(allocInstIndex + 2);
+                        pushLenInst.opcode = OP_LOAD_CONST;
+                        pushLenInst.params[0].type = PARAM_TYPE_INT;
+                        pushLenInst.params[1].type = PARAM_TYPE_SIZE;
+
+                        Instruction& movLenInst = proc->instructions.at(allocInstIndex + 3);
+                        movLenInst.opcode = OP_STORE_VAR;
+                        movLenInst.params[0].type = PARAM_TYPE_OFFEST;
+                        movLenInst.params[1].type = PARAM_TYPE_SIZE;
+                        movLenInst.params[0].size = sizeof(uint32_t);
+                        movLenInst.params[1].size = sizeof(uint32_t);
+                        movLenInst.params[0].offest = 8;  // 数组长度存储在变量的偏移量+8处
+                    }
+                }
+                // 关联指令
+                if (initInstBegin < proc->instructions.size()) {
+                    for (int i = initInstBegin; i < proc->instructions.size(); i++) {
+                        newVar.instIndex.push_back(i);
+                    }
+                }
+            }
+
+            Instruction storeInst = {};
+            if (newVar.isTypeKnown && newVar.type.arrayLength != 0) {
+                Instruction loadHeapAddrInst = {};
+                loadHeapAddrInst.opcode = OP_LOAD_VAR;
+                loadHeapAddrInst.params[0].type = PARAM_TYPE_OFFEST;
+                loadHeapAddrInst.params[1].type = PARAM_TYPE_SIZE;
+                loadHeapAddrInst.params[0].size = sizeof(uint32_t);
+                loadHeapAddrInst.params[1].size = sizeof(uint32_t);
+                loadHeapAddrInst.params[0].offest = 0;  // 数组的堆内存地址存储在变量的偏移量处
+                proc->instructions.push_back(loadHeapAddrInst);
+
+                storeInst.opcode = OP_COPY_ARR_DATA_FROM_CONSTANT;
+            } else {
+                storeInst.opcode = OP_STORE_VAR;
+                storeInst.params[0].type = PARAM_TYPE_OFFEST;
+                storeInst.params[1].type = PARAM_TYPE_SIZE;
+            }
+            proc->instructions.push_back(storeInst);
+
+            if (index + 1 >= function->bodyTokenCount) {
+                setError(ERR_DEF_VAR, currentToken.line, NULL);
+                *err = 255;
+                delete (proc);
+                return 255;
+            }
+            index++;
         }
         // 若为数组，需生成分配堆内存的指令
-        if (newVar.isTypeKnown && newVar.type.arrayLength != 0) {
+        if (!isAlreadyGenHeapAllocInst && newVar.isTypeKnown && newVar.type.arrayLength != 0) {
             // 分配堆内存的指令应在初始化指令之前
             if (newVar.type.kind == IR_DT_CHAR_ARR || newVar.type.kind == IR_DT_CUSTOM_ARR ||
                 newVar.type.kind == IR_DT_FLOAT_ARR || newVar.type.kind == IR_DT_INT_ARR ||
@@ -1646,7 +1814,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
                 Instruction& pushLenInst = proc->instructions.at(allocInstIndex + 2);
                 pushLenInst.opcode = OP_LOAD_CONST;
                 pushLenInst.params[0].type = PARAM_TYPE_INT;
-                pushLenInst.params[1];
+                pushLenInst.params[1].type = PARAM_TYPE_SIZE;
 
                 Instruction& movLenInst = proc->instructions.at(allocInstIndex + 3);
                 movLenInst.opcode = OP_STORE_VAR;
@@ -1677,7 +1845,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
         // if (stackSize + varSize > stackSize) stackSize += varSize;
         if (localVarSize + 1 > localVarSize) localVarSize++;
 
-    } else if (wcscmp(currentToken.value, L"定义变量") == 0) {  // 定义变量: <id> [, 类型是:<kw>|<id>]];
+    } else if (wcscmp(currentToken.value, L"定义变量") == 0) {  // 定义变量: <id> [, 类型是:<kw>|<id>] = <expression> ;
         Symbol newVar = {};
         newVar.procIndex = procIndex;
         if (index + 1 >= function->bodyTokenCount) {
@@ -1745,7 +1913,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
                 delete (proc);
                 return 255;
             }
-            index++;  // 指向"类型是"或"初始化"
+            index++;  // 指向"类型是"
             if (wcscmp(L"类型是", function->bodyTokens[index].value) == 0) {
                 newVar.isTypeKnown = true;
                 if (index + 1 >= function->bodyTokenCount) {
@@ -1918,6 +2086,11 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
                         index += 2;
                     }
                 }
+            } else {
+                setError(ERR_DEF_VAR, currentToken.line, NULL);
+                *err = 255;
+                delete (proc);
+                return 255;
             }
         }
         if (index + 1 >= function->bodyTokenCount) {
@@ -1933,9 +2106,90 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
         int initInstBegin = proc->instructions.size();
         if (function->bodyTokens[index].type == TOK_OPR_SET) {
             isInit = true;
-            if (newVar.isTypeKnown) {  //  <=> 已显示声明类型
-            }
+            bool isOrginalTypeKnown = newVar.isTypeKnown;
             newVar.isTypeKnown = true;
+
+            if (index + 1 >= function->bodyTokenCount) {
+                setError(ERR_DEF_VAR, currentToken.line, NULL);
+                *err = 255;
+                delete (proc);
+                return 255;
+            }
+            index++;  // 指向表达式起始位置
+            ASTNode* expNode = parseExpression(function->bodyTokens, &index, function->bodyTokenCount, pitchTable,
+                                               &(outsideScopes.at(localeScopeIndex)), outsideScopes, localeScopeIndex,
+                                               currentProgram->classes, err, false);
+            if (*err != 0 || !expNode) {
+                delete (proc);
+                return 255;
+            }
+            if (isOrginalTypeKnown) {
+                if (newVar.type.kind != IR_DT_CUSTOM) {
+                    if (newVar.type.kind == IR_DT_STRING && expNode->resultType.kind != IR_DT_STRING) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_INT_ARR && expNode->resultType.kind != IR_DT_INT_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_FLOAT_ARR && expNode->resultType.kind != IR_DT_FLOAT_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_CHAR_ARR && expNode->resultType.kind != IR_DT_CHAR_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_STRING_ARR && expNode->resultType.kind != IR_DT_STRING_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    } else if (newVar.type.kind == IR_DT_CUSTOM_ARR && expNode->resultType.kind != IR_DT_CUSTOM_ARR) {
+                        setError(ERR_TYPE, currentToken.line, NULL);
+                        *err = 255;
+                        delete (proc);
+                        return 255;
+                    }
+                } else if ((newVar.type.kind == IR_DT_CUSTOM && expNode->resultType.kind != IR_DT_CUSTOM) ||
+                           (newVar.type.customTypeName && expNode->resultType.customTypeName &&
+                            wcscmp(newVar.type.customTypeName, expNode->resultType.customTypeName) != 0)) {
+                    setError(ERR_TYPE, currentToken.line, NULL);
+                    *err = 255;
+                    delete (proc);
+                    return 255;
+                }
+            } else {
+                newVar.type = expNode->resultType;
+                newVar.isTypeKnown = true;
+            }
+            // 生成表达式指令
+            int inst_index = proc->instructions.size();
+            int inst_size = proc->instructions.size();
+            generateInstructionsFromAST(proc->instructions, &inst_index, &inst_size, expNode, currentProgram->classes,
+                                        constantPool, outsideScopes, procIndex, err);
+            if (*err != 0) {
+                freeAST(expNode);
+                return 255;
+            }
+
+            Instruction storeInst = {};
+            if (newVar.isTypeKnown && newVar.type.arrayLength != 0) {
+                storeInst.opcode = OP_STORE_ARRAY_ELEMENT;
+            } else {
+                storeInst.opcode = OP_STORE_VAR;
+                // 关联指令
+                if (initInstBegin < proc->instructions.size()) {
+                    for (int i = initInstBegin; i < proc->instructions.size(); i++) {
+                        newVar.instIndex.push_back(i);
+                    }
+                }
+            }
         }
         // 若为数组，需生成分配堆内存的指令
         if (newVar.isTypeKnown && newVar.type.arrayLength != 0) {
@@ -1976,7 +2230,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
                 Instruction& pushLenInst = proc->instructions.at(allocInstIndex + 2);
                 pushLenInst.opcode = OP_LOAD_CONST;
                 pushLenInst.params[0].type = PARAM_TYPE_INT;
-                pushLenInst.params[1];
+                pushLenInst.params[1].type = PARAM_TYPE_SIZE;
 
                 Instruction& movLenInst = proc->instructions.at(allocInstIndex + 3);
                 movLenInst.opcode = OP_STORE_VAR;
@@ -2075,7 +2329,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
             }
             ASTNode* expNode =
                 parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &(outsideScopes.at(localeScopeIndex)),
-                                outsideScopes, localeScopeIndex, currentProgram->classes, err);
+                                outsideScopes, localeScopeIndex, currentProgram->classes, err, false);
             if (*err != 0 || !expNode) {
                 delete (proc);
                 return 255;
@@ -2182,7 +2436,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
             }
             ASTNode* expNode =
                 parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &(outsideScopes.at(localeScopeIndex)),
-                                outsideScopes, localeScopeIndex, currentProgram->classes, err);
+                                outsideScopes, localeScopeIndex, currentProgram->classes, err, false);
             if (*err != 0 || !expNode) {
                 delete (proc);
                 return 255;
@@ -2256,7 +2510,7 @@ static int generateStatement(int& index, FunCallPitchTable& pitchTable, Constant
         // 分析表达式
         ASTNode* expNode =
             parseExpression(function->bodyTokens, &expIndex, index, pitchTable, &(outsideScopes.at(localeScopeIndex)),
-                            outsideScopes, localeScopeIndex, currentProgram->classes, err);
+                            outsideScopes, localeScopeIndex, currentProgram->classes, err, false);
         if (*err != 0 || !expNode) {
             delete (proc);
             return 255;
