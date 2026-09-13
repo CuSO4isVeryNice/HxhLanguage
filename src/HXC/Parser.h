@@ -1094,7 +1094,7 @@ ASTNode* parseExpression(Token* exp, int* index, int size, FunCallPitchTable& pi
     ASTNode* root =
         parseExprRec(exp, index, size, pitchTable, table, outsideTable, localeScopeIndex, classTable, err, 0, isParsingFunArgs);
     if (*err == 0 && root != NULL && *index < size) {
-        if (exp[*index].type != TOK_END) {
+        if (!isParsingFunArgs && exp[*index].type != TOK_END) {
             *err = 255;
             setError(ERR_EXP, exp[*index].line, exp[*index].value);
             return NULL;
