@@ -156,6 +156,17 @@ typedef struct Symbol {
     void* address;
 } Symbol;
 
+#ifdef HX_DEBUG
+void showOpStackInfo(OpStack& stack) {
+    wprintf(L"\n\n+======================+\n");
+    wprintf(L"| top -> stack[%d]     |\n", stack.top);
+    wprintf(L"| -------------------- |\n");
+    wprintf(L"| size: %d             |\n", OP_STACK_SIZE);
+    wprintf(L"+======================+\n\n\n");
+    return;
+}
+#endif
+
 #include "../HxSharedLib/Template.h"
 
 // 真假判定
@@ -197,6 +208,9 @@ int interpret(ObjectCode& obj, int& ret, int& err) noexcept {
     OpStack opStack = {};
 
     while (!frames.empty() && (!shouldExit.load())) {
+#ifdef HX_DEBUG
+        showOpStackInfo(opStack);
+#endif
         if (interpretInstruction(frames[(frameTop)]->proc->instructions[(frames[(frameTop)]->instIndex)], opStack,
                                  frames[(frameTop)]->stack, obj, frames[(frameTop)]->instIndex, frameTop, frames))
             return -1;
@@ -1346,7 +1360,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                 return -1;
             }
             uint32_t elementOffest = 0;
-            opStack.top--;
+            opStack.top--;                  //弹出数组指针地址
             memcpy(&elementOffest, opStack.opStack[opStack.top].value, sizeof(uint32_t));
             elementOffest *= size;
             void* elementAddr = (char*)arrAddr + elementOffest;
@@ -1375,7 +1389,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                     return -1;
                 } break;
             }
-            opStack.top++;
+            //opStack.top++;
             break;
         }
         case OP_LOAD_VARIABLE_FROM_ADDRESS: {

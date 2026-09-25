@@ -9,6 +9,7 @@
 #include <string>
 
 #include "HxVector.h"
+
 typedef uint8_t Opcode;
 enum {
     OP_NOP = 0,
