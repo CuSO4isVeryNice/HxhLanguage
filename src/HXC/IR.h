@@ -519,11 +519,14 @@ void freeIRProgram(IR_Program** program) {
 // 根据字符串解析数据类型
 static IR_DataType parseDataTypeByString(wchar_t* typeStr) noexcept {
     IR_DataType dt;
+    #ifdef HX_DEBUG
+    log(L"解析数据类型：%ls", typeStr);
+    #endif
     if (wcscmp(typeStr, L"int") == 0) {
         dt.kind = IR_DT_INT;
     } else if (wcscmp(typeStr, L"float") == 0) {
         dt.kind = IR_DT_FLOAT;
-    } else if (wcscmp(typeStr, L"string") == 0) {
+    } else if (wcscmp(typeStr, L"str") == 0) {
         dt.kind = IR_DT_STRING;
     } else if (wcscmp(typeStr, L"char") == 0) {
         dt.kind = IR_DT_CHAR;
@@ -539,7 +542,7 @@ static IR_DataType parseDataTypeByString(wchar_t* typeStr) noexcept {
         dt.kind = IR_DT_INT;
     } else if (wcscmp(typeStr, L"浮点型") == 0) {
         dt.kind = IR_DT_FLOAT;
-    } else if (wcscmp(typeStr, L"字符串") == 0) {
+    } else if (wcscmp(typeStr, L"字符串型") == 0) {
         dt.kind = IR_DT_STRING;
     } else if (wcscmp(typeStr, L"字符型") == 0) {
         dt.kind = IR_DT_CHAR;
@@ -560,7 +563,7 @@ IR_DataType parseDataType(Tokens* tokens, int* index, int size, int* err) {
         *err = -1;
         return dt;
     }
-    if (tokens->tokens[*index].type != TOK_ID) {
+    if (tokens->tokens[*index].type != TOK_ID && tokens->tokens[*index].type != TOK_KW) {
         return dt;
     }
     dt = parseDataTypeByString(tokens->tokens[*index].value);

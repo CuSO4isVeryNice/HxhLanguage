@@ -473,12 +473,15 @@ AFTER_COLON:
                 if (table->fun.size() > 0) {
                     for (uint32_t i = 0; i < table->fun.size(); i++) {
 #ifdef HX_DEBUG
-                        log(L"获取函数索引和返回值类型->遍历到：%ls", table->fun[i]->name);
+                        log(L"获取函数索引和返回值类型->遍历到：%ls  funCallNode->data.funCall.arg_count=%d", table->fun[i]->name, funCallNode->data.funCall.arg_count);
 #endif
                         // 名字
                         IR_Function* f = table->fun[i];
                         if (!f) continue;
                         if (wcscmp(f->name, funCallNode->data.funCall.name) == 0) {
+#ifdef HX_DEBUG
+                            log(L"找到函数：%ls  其参数个数：%d", f->name,f->paramCount);
+#endif
                             // 参数个数
                             if (f->paramCount != funCallNode->data.funCall.arg_count) {
                                 continue;
@@ -486,6 +489,8 @@ AFTER_COLON:
                             bool match = true;
                             for (int j = 0; j < funCallNode->data.funCall.arg_count; j++) {
                                 if (funCallNode->data.funCall.args[j]->resultType.kind != f->params[j].type.kind) {
+                                    log(L"参数类型不匹配：实参类型=%d, 形参类型=%d", funCallNode->data.funCall.args[j]->resultType.kind,
+                                        f->params[j].type.kind);
                                     match = false;
                                     break;
                                 }

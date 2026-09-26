@@ -38,8 +38,9 @@ typedef struct ArgSym {
         char boolValue;
         uint16_t unicodeValue;
         void* addressValue;
+        wchar_t* strValue;
     } value;
-    enum { TYPE_I32, TYPE_BYTE, TYPE_FLOAT, TYPE_DOUBLE, TYPE_BOOL, TYPE_UNI_CHAR, TYPE_ADDR } type;
+    enum { TYPE_I32, TYPE_BYTE, TYPE_FLOAT, TYPE_DOUBLE, TYPE_BOOL, TYPE_UNI_CHAR, TYPE_ADDR, TYPE_STRING } type;
     _OpStack opStackParam;
 } ArgSym;
 

@@ -138,7 +138,7 @@ typedef enum OpStackType {
     TYPE_FLOAT,  // double
     TYPE_CHAR,
     TYPE_BOOL,
-    TYPE_STRING,
+    TYPE_STRING,   //等同于TYPE_ADDRESS，size=4，存放wchar_t*，在解释阶段当作地址处理
     TYPE_ADDRESS,  // size = 4
 } StackType;
 typedef struct _OpStack {
@@ -339,7 +339,7 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                     break;
                 case PARAM_TYPE_STRING:
                     opStack.opStack[opStack.top].type = TYPE_STRING;
-                    opStack.opStack[opStack.top].size = sizeof(uint16_t*);
+                    opStack.opStack[opStack.top].size = sizeof(wchar_t*);
                     break;
                 case PARAM_TYPE_ADDRESS:
                     opStack.opStack[opStack.top].type = TYPE_ADDRESS;
@@ -351,6 +351,9 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                     break;
             }
             if (inst.params[0].type == PARAM_TYPE_STRING) {
+                #ifdef HX_DEBUG
+                    wprintf(LOG_LABEL L"加载字符串常量到操作数栈\n");
+                #endif
                 if (inst.params[1].type != PARAM_TYPE_INDEX) {
                     fwprintf(errorStream, ERR_LABEL L"非法指令格式\n");
                     return -1;
@@ -360,8 +363,10 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                     fwprintf(errorStream, ERR_LABEL L"非法指令格式\n");
                     return -1;
                 }
-                wchar_t* wstr = obj.constantPool.constants[*index].value.stringValue;
-                memcpy(opStack.opStack[opStack.top].value, wstr, sizeof(wchar_t*));
+                void* wstr = (void*)(obj.constantPool.constants[*index].value.stringValue);
+                memcpy(opStack.opStack[opStack.top].value, &wstr, sizeof(void*));
+                opStack.opStack[opStack.top].isTmpHeap = 0;
+                opStack.opStack[opStack.top].size = sizeof(void*);
             } else {
                 if (inst.params[0].type == PARAM_TYPE_INDEX) {
                     fwprintf(errorStream, ERR_LABEL L"非法指令格式\n");
@@ -1543,21 +1548,26 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                 LibFun::ArgSym argSym = {};
                 argSym.opStackParam = opStack.opStack[i];
                 switch (opStack.opStack[i].type) {
-                    case PARAM_TYPE_ADDRESS:
+                    case TYPE_ADDRESS:
                         argSym.memPtr = (void*)(opStack.opStack[i].value);
-                        argSym.value.addressValue = (void*)(opStack.opStack[i].value);
                         argSym.type = LibFun::ArgSym::TYPE_ADDR;
+                        memcpy(&argSym.value.addressValue, opStack.opStack[i].value, sizeof(void*));
                         break;
-                    case PARAM_TYPE_BOOL:
+                    case TYPE_STRING:
+                        argSym.memPtr = (void*)(opStack.opStack[i].value);
+                        argSym.type = LibFun::ArgSym::TYPE_STRING;
+                        memcpy(&argSym.value.strValue, opStack.opStack[i].value, sizeof(void*));
+                        break;
+                    case TYPE_BOOL:
                         // argSym.memPtr = (void*)(opStack.opStack[i].value);
                         argSym.value.boolValue = *((char*)(opStack.opStack[i].value));
                         argSym.type = LibFun::ArgSym::TYPE_BOOL;
                         break;
-                    case PARAM_TYPE_CHAR:
+                    case TYPE_CHAR:
                         argSym.value.unicodeValue = *((wchar_t*)(opStack.opStack[i].value));
                         argSym.type = LibFun::ArgSym::TYPE_UNI_CHAR;
                         break;
-                    case PARAM_TYPE_FLOAT:
+                    case TYPE_FLOAT:
                         argSym.value.doubleValue = *((double*)(opStack.opStack[i].value));
                         argSym.type = LibFun::ArgSym::TYPE_DOUBLE;
                         break;
