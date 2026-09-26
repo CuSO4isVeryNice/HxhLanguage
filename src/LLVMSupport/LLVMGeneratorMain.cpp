@@ -16,7 +16,9 @@
 #define HXVM_VERSION 0.114f
 
 #include "../HXVM/ObjectReader.h"
+#include "GenerateMachineCode.h"
 #include "HxProcToLLVMFunction.h"
+#include "Optimizer.h"
 
 extern void initLocale(void);
 
@@ -38,10 +40,30 @@ int main(int argc, char* argv[]) {
     fwprintf(logStream, LOG_LABEL L"读取文件成功喵：%s\n", inputFilePath.c_str());
 
     llvm::LLVMContext llvmContext;
-    llvm::Module* HxModule = new llvm::Module("hxvm_aot_module", llvmContext);
-    llvm::IRBuilder<> Builder(llvmContext);
+    llvm::Module* hxModule = new llvm::Module("hxvm_aot_module", llvmContext);
+    llvm::IRBuilder<> builder(llvmContext);
 
-    int err = hxMainProcToLLVMFunction(llvmContext, HxModule, Builder, obj);
+    int err = hxMainProcToLLVMFunction(llvmContext, hxModule, builder, obj);
+    if (err != 0) {
+        fwprintf(errorStream, ERR_LABEL L"hxMainProcToLLVMFunction() 失败了喵\n");
+        freeObjectCode(obj);
+        return 1;
+    }
+
+    llvm::LoopAnalysisManager loopAnalysisManager;
+    llvm::FunctionAnalysisManager functionAnalysisManager;
+    llvm::CGSCCAnalysisManager cGSCCAnalysisManager;
+    llvm::ModuleAnalysisManager moduleAnalysisManager;
+    optimizeLLVMModule(hxModule, functionAnalysisManager, loopAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
+
+    generateMachineCode(hxModule, "output.o");
+
+    err = system("gcc output.o -o output -no-pie");
+    if (err == 0) {
+        fwprintf(logStream, LOG_LABEL L"大功告成喵！可执行文件已生成！(≧∇≦)ﾉ\n");
+    } else {
+        fwprintf(errorStream, ERR_LABEL L"链接失败了，杂鱼赶紧去检查系统的 gcc 装好没喵！\n");
+    }
 
     freeObjectCode(obj);
     return 0;

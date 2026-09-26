@@ -1571,6 +1571,10 @@ inline int interpretInstruction(Instruction& inst, OpStack& opStack, char*& stac
                         argSym.value.doubleValue = *((double*)(opStack.opStack[i].value));
                         argSym.type = LibFun::ArgSym::TYPE_DOUBLE;
                         break;
+                    case TYPE_INT:
+                        argSym.value.i32Value = *((int32_t*)(opStack.opStack[i].value));
+                        argSym.type = LibFun::ArgSym::TYPE_I32;
+                        break;
                 }
                 args.args.push_back(argSym);
                 currentParamIndex++;
