@@ -1,0 +1,11 @@
+m()->int = f(-1)
+f(x:int) = x+1
+
+cls:Test = {
+    pri var test:int
+    pub f(x:float) = x*114
+}
+cls:SubTest -> Test = {
+    ptd var subTest:long
+    pub g(x:double) = x*0.114
+}
