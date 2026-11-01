@@ -1,3 +1,0 @@
-/data/data/com.termux/files/home/HxhLanguage/build/CMakeFiles/hxhc.dir
-/data/data/com.termux/files/home/HxhLanguage/build/CMakeFiles/edit_cache.dir
-/data/data/com.termux/files/home/HxhLanguage/build/CMakeFiles/rebuild_cache.dir
