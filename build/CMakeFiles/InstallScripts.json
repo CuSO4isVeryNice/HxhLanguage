@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"/home/cuso4/HxhLanguage/build/cmake_install.cmake"
+		"/data/data/com.termux/files/home/HxhLanguage/build/cmake_install.cmake"
 	],
 	"Parallel" : false
 }

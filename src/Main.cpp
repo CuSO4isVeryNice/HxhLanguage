@@ -1,6 +1,5 @@
 #include <locale.h>
 #include <wchar.h>
-
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -10,6 +9,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Verifier.h>
+
 bool isDebugMode = true;
 #define ERR_LABEL L"\33[1;31m[E]\33[0m "
 #define INFO_LABEL L"\33[1;34m[I]\33[0m "

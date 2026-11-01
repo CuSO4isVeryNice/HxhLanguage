@@ -1,8 +1,0 @@
-[
-{
-  "directory": "/home/cuso4/HxhLanguage/build",
-  "command": "/usr/bin/g++ -g -std=gnu++20   -D_GNU_SOURCE -D_GLIBCXX_USE_CXX11_ABI=1 -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -O3 -finline-functions -funroll-loops -o CMakeFiles/hxhc.dir/src/Main.cpp.o -c /home/cuso4/HxhLanguage/src/Main.cpp",
-  "file": "/home/cuso4/HxhLanguage/src/Main.cpp",
-  "output": "/home/cuso4/HxhLanguage/build/CMakeFiles/hxhc.dir/src/Main.cpp.o"
-}
-]
